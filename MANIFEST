@@ -12,8 +12,8 @@ claude/agents/explorer.md
 claude/agents/implementer.md
 claude/agents/reviewer.md
 claude/agents/reverse-engineer.md
-claude/agents/ui-tester.md
-claude/agents/ui-tester-headed.md
+claude/agents/browser-headless.md
+claude/agents/browser-headed.md
 claude/mcp-servers/ollama-delegate/server.py
 claude/local-mode/claude-local
 claude/local-mode/sync-local.sh

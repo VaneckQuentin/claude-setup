@@ -43,14 +43,16 @@ delegate.
    tokens. Use `model:"cheap"` for text, `model:"code"` for code-ish work.
 5. **Code navigation** → prefer Serena symbol tools (`find_symbol`,
    `get_symbols_overview`, `find_referencing_symbols`) over reading whole files.
-6. **UI verification** (does the web interface actually work after a change) →
+6. **Real-browser work** (verify a UI change end-to-end, or any task needing a
+   live page: JS-heavy sites, forms, auth flows, scraping rendered content) →
    a browser subagent via Playwright; snapshots and screenshots stay in ITS
-   context, only the verdict returns. BEFORE spawning, ask the user with
-   AskUserQuestion whether they want to watch the run: visible browser window →
-   spawn `ui-tester-headed`; headless (recommended default) → spawn
-   `ui-tester`. Skip the question and go headless when the user already said
-   which they want, when running autonomously/unattended, or when there is no
-   local graphical session (SSH/CI).
+   context, only the conclusion returns. BEFORE spawning, ask the user with
+   AskUserQuestion whether they want to watch the run: visible browser window
+   → spawn `browser-headed`; headless (recommended default) → spawn
+   `browser-headless`. Skip the question and go headless when the user already
+   said which they want, when running autonomously/unattended, or when there
+   is no local graphical session (SSH/CI). For read-only fetching of static
+   pages/docs, plain WebFetch/WebSearch is cheaper — no subagent needed.
 
 ## Language
 

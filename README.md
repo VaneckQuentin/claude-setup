@@ -27,9 +27,9 @@ per-project Serena registrations (see below), the Ollama model weights.
 1. Install prerequisites: [Claude Code](https://claude.com/claude-code),
    `python3`, [Ollama](https://ollama.com) ≥ 0.30 (native Anthropic endpoint),
    `uv` (for `uvx`/Serena). Optional: `php`, `node` (lint hook checks more
-   file types; it fail-opens without them). For the `ui-tester` agents
-   (browser testing, headless by default; `ui-tester-headed` opens a visible
-   window — the orchestrator asks which you want): node +
+   file types; it fail-opens without them). For the browser agents
+   (`browser-headless` by default; `browser-headed` opens a visible window —
+   the orchestrator asks which you want): node +
    `npx playwright install chromium`.
 2. Clone this repo, then:
 
