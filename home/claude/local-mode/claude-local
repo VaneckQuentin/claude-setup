@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# claude-local — launch Claude Code in FULL-LOCAL mode, straight onto Ollama.
+#
+# No proxy: Ollama 0.30+ serves the native Anthropic /v1/messages endpoint, so
+# Claude Code talks to it directly. Models per role come from roles.conf via
+# sync-local.sh. Its own config dir (~/.claude-local) keeps the role-based
+# subagents isolated from hybrid mode.
+#
+# Usage:
+#   claude --local [claude args...]     (wrapper) or this script directly
+#   claude-local --status               check Ollama reachability
+set -euo pipefail
+
+OLLAMA_HOST="http://localhost:11434"
+ENVFILE="$HOME/.claude/local-mode/models.env"
+
+if [[ "${1:-}" == "--status" ]]; then
+  if curl -sf "$OLLAMA_HOST/api/tags" >/dev/null 2>&1; then echo "Ollama: UP on $OLLAMA_HOST"; else echo "Ollama: down"; fi
+  exit 0
+fi
+
+# 1. Ollama must be reachable.
+if ! curl -sf "$OLLAMA_HOST/api/tags" >/dev/null 2>&1; then
+  echo "ERROR: Ollama is not reachable on :11434. Start it first (ollama serve)." >&2
+  exit 1
+fi
+
+# 2. Ensure roles have been synced.
+if [[ ! -f "$ENVFILE" ]]; then
+  echo "No models.env yet — running sync-local.sh..."
+  "$HOME/.claude/local-mode/sync-local.sh"
+fi
+# shellcheck disable=SC1090
+source "$ENVFILE"
+
+# 3. Launch Claude Code pointed straight at Ollama, in its own config dir.
+echo "FULL-LOCAL mode — orchestrator: ${ANTHROPIC_MODEL} (via Ollama, no proxy)."
+echo "Note: local models are weaker at long agentic chains; keep tasks tight."
+exec env \
+  CLAUDE_CONFIG_DIR="$HOME/.claude-local" \
+  ANTHROPIC_BASE_URL="$OLLAMA_HOST" \
+  ANTHROPIC_API_KEY="ollama-local" \
+  ANTHROPIC_AUTH_TOKEN="ollama-local" \
+  ANTHROPIC_MODEL="$ANTHROPIC_MODEL" \
+  ANTHROPIC_SMALL_FAST_MODEL="$ANTHROPIC_SMALL_FAST_MODEL" \
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1" \
+  claude "$@"

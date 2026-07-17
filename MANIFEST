@@ -1,0 +1,26 @@
+# Files that make up the Claude Code setup, relative to home/ in this repo.
+# Mapping: claude/* -> ~/.claude/*    claude-local/* -> ~/.claude-local/*
+# Used by install.sh (repo -> home) and capture.sh (home -> repo).
+
+claude/CLAUDE.md
+claude/settings.json
+claude/hooks/run-hook.sh
+claude/hooks/dispatch-directive.py
+claude/hooks/post-edit-lint.py
+claude/hooks/commit-guard.py
+claude/agents/explorer.md
+claude/agents/implementer.md
+claude/agents/reviewer.md
+claude/agents/reverse-engineer.md
+claude/agents/ui-tester.md
+claude/mcp-servers/ollama-delegate/server.py
+claude/local-mode/claude-local
+claude/local-mode/sync-local.sh
+claude/local-mode/roles.conf
+claude/local-mode/bootstrap-reverse.sh
+claude-local/CLAUDE.md
+claude-local/settings.json
+claude-local/agents/explorer.md
+claude-local/agents/implementer.md
+claude-local/agents/reviewer.md
+claude-local/agents/reverse-engineer.md
