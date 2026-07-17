@@ -6,12 +6,13 @@ description: >
   live. Spawn this variant only when the user chose "visible" (see CLAUDE.md
   dispatch rule 6); otherwise use browser-headless. Requires a local
   graphical session — won't work over SSH/CI.
-tools: Read, Grep, Glob, Bash
+disallowedTools: Edit, Write, NotebookEdit, Agent
 model: sonnet
 mcpServers:
-  playwright:
-    command: npx
-    args: ["-y", "@playwright/mcp@latest", "--browser", "chromium"]
+  - playwright:
+      type: stdio
+      command: npx
+      args: ["-y", "@playwright/mcp@latest", "--browser", "chromium"]
 ---
 
 You are a browser pilot. You drive a real browser to do what the brief asks on

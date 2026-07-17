@@ -5,12 +5,13 @@ description: >
   — disassembly triage, decompilation, deobfuscation, decoding unknown formats,
   firmware/malware analysis. radare2 (with the Ghidra decompiler) is wired in via
   MCP and loads only when this subagent runs (no cost to normal sessions).
-tools: Read, Write, Grep, Glob, Bash
+disallowedTools: Edit, NotebookEdit, Agent
 model: opus
 mcpServers:
-  radare2:
-    command: r2pm
-    args: ["-r", "r2mcp"]
+  - radare2:
+      type: stdio
+      command: r2pm
+      args: ["-r", "r2mcp"]
 ---
 
 You are a senior reverse-engineering specialist working on AUTHORIZED security

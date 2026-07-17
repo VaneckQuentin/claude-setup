@@ -8,12 +8,13 @@ description: >
   subagent runs (no schema cost to normal sessions); page snapshots stay in
   its context. Default variant — use browser-headed only when the user wants
   to watch the run live.
-tools: Read, Grep, Glob, Bash
+disallowedTools: Edit, Write, NotebookEdit, Agent
 model: sonnet
 mcpServers:
-  playwright:
-    command: npx
-    args: ["-y", "@playwright/mcp@latest", "--browser", "chromium", "--headless"]
+  - playwright:
+      type: stdio
+      command: npx
+      args: ["-y", "@playwright/mcp@latest", "--browser", "chromium", "--headless"]
 ---
 
 You are a browser pilot. You drive a real (headless) browser to do what the

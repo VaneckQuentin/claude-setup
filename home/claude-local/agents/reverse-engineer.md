@@ -6,9 +6,10 @@ description: >
   analysis. Has radare2 (with the Ghidra decompiler) wired in via MCP.
 model: qwen3-coder:30b
 mcpServers:
-  radare2:
-    command: r2pm
-    args: ["-r", "r2mcp"]
+  - radare2:
+      type: stdio
+      command: r2pm
+      args: ["-r", "r2mcp"]
 ---
 
 You are a reverse-engineering specialist. You analyze unfamiliar, obfuscated, or
