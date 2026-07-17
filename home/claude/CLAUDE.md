@@ -44,8 +44,13 @@ delegate.
 5. **Code navigation** → prefer Serena symbol tools (`find_symbol`,
    `get_symbols_overview`, `find_referencing_symbols`) over reading whole files.
 6. **UI verification** (does the web interface actually work after a change) →
-   spawn the `ui-tester` subagent. It drives a headless browser via Playwright;
-   snapshots and screenshots stay in ITS context, only the verdict returns.
+   a browser subagent via Playwright; snapshots and screenshots stay in ITS
+   context, only the verdict returns. BEFORE spawning, ask the user with
+   AskUserQuestion whether they want to watch the run: visible browser window →
+   spawn `ui-tester-headed`; headless (recommended default) → spawn
+   `ui-tester`. Skip the question and go headless when the user already said
+   which they want, when running autonomously/unattended, or when there is no
+   local graphical session (SSH/CI).
 
 ## Language
 

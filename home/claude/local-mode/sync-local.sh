@@ -84,6 +84,7 @@ update_agent "$AGENTS_HYBRID" implementer.md      "$(model_for claude.implemente
 update_agent "$AGENTS_HYBRID" reviewer.md         "$(model_for claude.reviewer)"
 update_agent "$AGENTS_HYBRID" reverse-engineer.md "$(model_for claude.reverse-engineer)"
 update_agent "$AGENTS_HYBRID" ui-tester.md        "$(model_for claude.ui-tester)"
+update_agent "$AGENTS_HYBRID" ui-tester-headed.md "$(model_for claude.ui-tester-headed)"
 
 # tiers.json — consumed by the ollama-delegate MCP server at startup.
 {

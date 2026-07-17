@@ -13,6 +13,7 @@ claude/agents/implementer.md
 claude/agents/reviewer.md
 claude/agents/reverse-engineer.md
 claude/agents/ui-tester.md
+claude/agents/ui-tester-headed.md
 claude/mcp-servers/ollama-delegate/server.py
 claude/local-mode/claude-local
 claude/local-mode/sync-local.sh
