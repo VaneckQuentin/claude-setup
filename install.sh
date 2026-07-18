@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # install.sh — replicate the Claude Code setup on this machine.
 #
-#   ./install.sh                 install files, register MCP, sync roles
-#   ./install.sh --with-models   also `ollama pull` the models from roles.conf
+#   ./install.sh                 install files, register MCP, sync roles;
+#                                interactively offers the recommended Ollama
+#                                models (or lets you pick your own per purpose)
+#   ./install.sh --with-models   pull the roles.conf models without asking
+#   ./install.sh --no-models     never prompt, never pull
 #
 # Idempotent: safe to re-run. Existing CLAUDE.md / settings.json that differ
 # are backed up to *.bak.<timestamp> before being overwritten.
@@ -11,7 +14,13 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")" && pwd)"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 WITH_MODELS=0
-[[ "${1:-}" == "--with-models" ]] && WITH_MODELS=1
+NO_MODELS=0
+for a in "$@"; do
+  case "$a" in
+    --with-models) WITH_MODELS=1 ;;
+    --no-models)   NO_MODELS=1 ;;
+  esac
+done
 
 map_dest() {
   case "$1" in
@@ -24,7 +33,11 @@ map_dest() {
 echo "== Prerequisites"
 command -v python3 >/dev/null || { echo "ERROR: python3 is required." >&2; exit 1; }
 command -v claude  >/dev/null || echo "WARNING: 'claude' CLI not found — install Claude Code first; MCP registration will be skipped."
-command -v ollama  >/dev/null || echo "WARNING: ollama not found — local delegation and full-local mode need it."
+command -v ollama  >/dev/null || {
+  echo "WARNING: ollama not found — local delegation (ollama_run) and 'claude --local' need it."
+  echo "         Install from https://ollama.com/download (macOS: brew install ollama),"
+  echo "         then re-run ./install.sh to pick and pull models."
+}
 command -v uvx     >/dev/null || echo "WARNING: uvx (uv) not found — needed to run the Serena MCP in big projects."
 command -v php     >/dev/null || echo "note: php not found — the lint hook will skip PHP files (fail-open)."
 
@@ -80,12 +93,74 @@ else
   echo "  appended to $RC"
 fi
 
-if [[ "$WITH_MODELS" == 1 ]] && command -v ollama >/dev/null; then
-  echo "== Pulling Ollama models from roles.conf (this is tens of GB)"
-  awk -F= '!/^\s*#/ && NF==2 && $1 !~ /claude\./ {gsub(/[ \t]/,"",$2); sub(/#.*/,"",$2); print $2}' \
-    "$HOME/.claude/local-mode/roles.conf" | sort -u | while read -r m; do
-    [[ -n "$m" ]] && ollama pull "$m"
+ROLES_LIVE="$HOME/.claude/local-mode/roles.conf"
+
+# Print "role model" pairs for the Ollama-backed roles (claude.* excluded).
+list_role_models() {
+  awk -F= '!/^[[:space:]]*#/ && NF>=2 && $1 !~ /claude\./ {
+    role=$1; gsub(/[[:space:]]/,"",role);
+    val=$2; sub(/#.*/,"",val); gsub(/[[:space:]]/,"",val);
+    if (val != "") print role, val
+  }' "$ROLES_LIVE"
+}
+
+# set_role_model <role> <model> — rewrite one assignment, keeping its comment.
+set_role_model() {
+  local role_re
+  role_re="$(printf '%s' "$1" | sed 's/\./\\./g')"
+  awk -v re="^[[:space:]]*${role_re}[[:space:]]*=" -v m="$2" \
+    '$0 ~ re { sub(/=[[:space:]]*[^#[:space:]]+/, "= " m) } { print }' \
+    "$ROLES_LIVE" > "$ROLES_LIVE.tmp" && mv "$ROLES_LIVE.tmp" "$ROLES_LIVE"
+}
+
+pull_role_models() {
+  list_role_models | awk '{print $2}' | sort -u | while read -r m; do
+    ollama pull "$m"
   done
+}
+
+echo "== Local models (Ollama)"
+if ! command -v ollama >/dev/null; then
+  echo "  skipped — ollama is not installed (see the warning above)."
+elif [[ "$WITH_MODELS" == 1 ]]; then
+  echo "  Pulling models from roles.conf (this is tens of GB)..."
+  pull_role_models
+elif [[ "$NO_MODELS" == 1 || ! -t 0 ]]; then
+  echo "  skipped — pull later with ./install.sh --with-models, or per model"
+  echo "  with 'ollama pull' + edit roles.conf + sync-local.sh."
+else
+  echo "  roles.conf maps each purpose to an Ollama model. Recommended defaults"
+  echo "  (tuned on an Apple Silicon Mac, 128 GB RAM; they run well from ~36 GB):"
+  list_role_models | awk '{printf "    %-14s -> %s\n", $1, $2}'
+  printf "  Download these now? [Y]es / [c]ustomize per purpose / [s]kip: "
+  read -r ans
+  case "${ans:-y}" in
+    [Cc]*)
+      echo "  Enter an Ollama tag per purpose (empty keeps the current value)."
+      echo "  Any tag from https://ollama.com/library works; tool-capable models"
+      echo "  are required for orchestrator/code/reverse."
+      groups=()
+      while IFS= read -r line; do groups+=("$line"); done < <(
+        list_role_models |
+        awk '{g[$2] = g[$2] (g[$2] ? "," : "") $1} END {for (m in g) print m, g[m]}'
+      )
+      for line in "${groups[@]}"; do
+        model="${line%% *}"; roles="${line#* }"
+        printf "    %s (currently %s): " "$roles" "$model"
+        read -r new
+        if [[ -n "$new" && "$new" != "$model" ]]; then
+          for r in ${roles//,/ }; do set_role_model "$r" "$new"; done
+        fi
+      done
+      printf "  Pull the selected models now? [Y/n]: "
+      read -r p
+      [[ "${p:-y}" =~ ^[Nn] ]] || pull_role_models
+      ;;
+    [Ss]*|[Nn]*)
+      echo "  skipped — pull later with ./install.sh --with-models." ;;
+    *)
+      pull_role_models ;;
+  esac
 fi
 
 echo "== Syncing roles (agents frontmatter, models.env, tiers.json)"

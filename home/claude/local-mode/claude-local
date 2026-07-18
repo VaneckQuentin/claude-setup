@@ -19,9 +19,16 @@ if [[ "${1:-}" == "--status" ]]; then
   exit 0
 fi
 
-# 1. Ollama must be reachable.
+# 1. Ollama must be installed and reachable.
+if ! command -v ollama >/dev/null 2>&1; then
+  echo "ERROR: full-local mode requires Ollama, which is not installed." >&2
+  echo "  Install it from https://ollama.com/download (macOS: brew install ollama)," >&2
+  echo "  then pull models: ./install.sh --with-models (or ollama pull per roles.conf)." >&2
+  exit 1
+fi
 if ! curl -sf "$OLLAMA_HOST/api/tags" >/dev/null 2>&1; then
-  echo "ERROR: Ollama is not reachable on :11434. Start it first (ollama serve)." >&2
+  echo "ERROR: Ollama is installed but not reachable on :11434." >&2
+  echo "  Start it first: ollama serve (or launch the Ollama app)." >&2
   exit 1
 fi
 

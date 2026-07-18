@@ -28,9 +28,8 @@ MAX_OUTPUT_CHARS = 20000   # hard cap on what flows back into the caller's conte
 # sync-local.sh. The literals below are only a fallback if that file is absent.
 TIERS_FILE = os.path.expanduser("~/.claude/local-mode/tiers.json")
 FALLBACK_TIER_MODELS = {
-    "code":  "qwen3-coder:30b",          # strong coder, use for real code work
-    "cheap": "gemma4:latest",            # fast, for summaries/classification/drafts
-    "tiny":  "llama2-uncensored:latest", # smallest, trivial text munging
+    "code":  "laguna-xs-2.1",  # strong agentic coder, use for real code work
+    "cheap": "gemma4:12b",     # fast, for summaries/classification/drafts
 }
 
 
@@ -89,8 +88,8 @@ def tool_list_models(_args):
         lines.append(f"  - {tier:5} -> {name}")
     lines.append(
         "\nGuidance: use `code` for real code generation/analysis, "
-        "`cheap` for summaries/classification/commit drafts, "
-        "`tiny` for trivial text munging."
+        "`cheap` for summaries/classification/commit drafts. Trivial "
+        "one-liners aren't worth delegating — do them inline."
     )
     return "\n".join(lines)
 
@@ -160,7 +159,7 @@ TOOLS = [
                 "prompt": {"type": "string", "description": "The full task/prompt for the local model."},
                 "model": {
                     "type": "string",
-                    "description": "Tier alias ('code','cheap','tiny') or a raw Ollama model name. Default 'code'.",
+                    "description": "Tier alias ('code','cheap') or a raw Ollama model name. Default 'code'.",
                 },
                 "system": {"type": "string", "description": "Optional system prompt."},
                 "temperature": {"type": "number", "description": "Sampling temperature, default 0.2."},

@@ -1,9 +1,8 @@
 # claude-setup
 
-Portable replica of my Claude Code setup: orchestrator dispatch rules, tiered
-subagents, local-model delegation (Ollama), full-local mode, and hooks.
-**Keep this repo private** — it holds personal workflow config (no credentials,
-but no reason to publish either).
+Portable Claude Code setup: orchestrator dispatch rules, tiered subagents,
+local-model delegation (Ollama), full-local mode, and hooks. No credentials or
+personal data live here — install it, log in, and it works.
 
 ## What it covers
 
@@ -34,8 +33,14 @@ per-project Serena registrations (see below), the Ollama model weights.
 2. Clone this repo, then:
 
    ```sh
-   ./install.sh --with-models    # or without the flag to skip the ~30GB pull
+   ./install.sh
    ```
+
+   If Ollama is installed, the script shows the recommended model per purpose
+   (defaults tuned on an Apple Silicon Mac with 128 GB RAM — they run well
+   from ~36 GB) and asks whether to download them, customize each purpose
+   with your own Ollama tags, or skip. Non-interactive: `--with-models`
+   pulls the roles.conf set (tens of GB), `--no-models` skips.
 
 3. `claude` once to log in.
 4. In each big codebase (symbol navigation worth ~30 tool schemas/session):

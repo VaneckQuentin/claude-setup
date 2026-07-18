@@ -111,6 +111,7 @@ Drop exploration transcripts and raw tool output first — never the above.
 ## Local model tiers (via ollama_run)
 
 Semantic tiers: `code` (real code generation/analysis), `cheap` (summaries,
-classification, drafts), `tiny` (trivial text munging). The tier → model
-mapping lives in `roles.conf` (`tier.*` lines, synced to `tiers.json`). Run
-`ollama_list_models` for the live list.
+classification, drafts). Trivial one-liners are NOT worth a delegation
+round-trip — do them inline; delegate only when the output has volume. The
+tier → model mapping lives in `roles.conf` (`tier.*` lines, synced to
+`tiers.json`). Run `ollama_list_models` for the live list.
