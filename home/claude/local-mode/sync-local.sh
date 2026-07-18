@@ -58,7 +58,8 @@ avail="$(installed_models || true)"
 if [[ -n "$avail" ]]; then
   for i in "${!roles[@]}"; do
     [[ "${roles[$i]}" == claude.* ]] && continue
-    grep -qxF "${models[$i]}" <<<"$avail" || echo "WARNING: '${models[$i]}' is not installed (ollama pull it)." >&2
+    m="${models[$i]}"; [[ "$m" == *:* ]] || m="$m:latest"  # tagless -> implicit :latest
+    grep -qxF "$m" <<<"$avail" || echo "WARNING: '${models[$i]}' is not installed (ollama pull it)." >&2
   done
 fi
 
