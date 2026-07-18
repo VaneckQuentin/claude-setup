@@ -56,9 +56,20 @@ def main():
     branch = git_branch(cwd)
     parts.append(branch if branch else os.path.basename(cwd))
 
-    cost = (data.get("cost") or {}).get("total_cost_usd")
-    if isinstance(cost, (int, float)) and cost > 0:
-        parts.append(f"${cost:.2f}")
+    # Plan usage (subscription): 5-hour session window + weekly. Falls back to
+    # the API-equivalent dollar figure when no rate limits exist (API billing).
+    limits = data.get("rate_limits") or {}
+    five_h = (limits.get("five_hour") or {}).get("used_percentage")
+    seven_d = (limits.get("seven_day") or {}).get("used_percentage")
+    if isinstance(five_h, (int, float)):
+        usage = f"5h {round(five_h)}%"
+        if isinstance(seven_d, (int, float)):
+            usage += f" · 7d {round(seven_d)}%"
+        parts.append(usage)
+    else:
+        cost = (data.get("cost") or {}).get("total_cost_usd")
+        if isinstance(cost, (int, float)) and cost > 0:
+            parts.append(f"${cost:.2f}")
 
     pct = context_pct(data)
     if pct is not None:
