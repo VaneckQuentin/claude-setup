@@ -22,6 +22,9 @@ OLLAMA_URL = "http://localhost:11434"
 DEFAULT_TIMEOUT = 600      # seconds; big models can be slow on first token
 DEFAULT_MAX_TOKENS = 2048  # num_predict cap — delegation returns conclusions, not dumps
 MAX_OUTPUT_CHARS = 20000   # hard cap on what flows back into the caller's context
+MAX_INPUT_CHARS = 300000   # total cap on injected file content (~75-90K tokens)
+KEEP_ALIVE = "30m"         # keep the model loaded between delegations in a session
+MAX_NUM_CTX = 131072       # request-level context ceiling (KV cache is RAM)
 
 # Semantic tiers -> concrete local models. Source of truth is
 # ~/.claude/local-mode/roles.conf (tier.* lines), synced to tiers.json by
@@ -45,14 +48,27 @@ def load_tier_models():
         log(f"[ollama-delegate] tiers.json unreadable ({e}), using fallback tiers")
     return dict(FALLBACK_TIER_MODELS)
 
-SERVER_INFO = {"name": "ollama-delegate", "version": "1.0.0"}
+SERVER_INFO = {"name": "ollama-delegate", "version": "1.1.0"}
 
 
 def log(*a):
     print(*a, file=sys.stderr, flush=True)
 
 
-TIER_MODELS = load_tier_models()
+# Re-read tiers.json when it changes (sync-local.sh rewrites it mid-session);
+# an mtime check keeps the per-call cost at one stat().
+_tier_cache = {"mtime": None, "tiers": dict(FALLBACK_TIER_MODELS)}
+
+
+def tier_models():
+    try:
+        mtime = os.path.getmtime(TIERS_FILE)
+    except OSError:
+        return _tier_cache["tiers"]
+    if mtime != _tier_cache["mtime"]:
+        _tier_cache["tiers"] = load_tier_models()
+        _tier_cache["mtime"] = mtime
+    return _tier_cache["tiers"]
 
 
 def http_json(path, payload, timeout=DEFAULT_TIMEOUT):
@@ -84,14 +100,37 @@ def tool_list_models(_args):
         params = m.get("details", {}).get("parameter_size", "?")
         lines.append(f"  - {m['name']}  ({params}, {size}GB)")
     lines.append("\nSuggested tiers (pass as `model`):")
-    for tier, name in TIER_MODELS.items():
+    for tier, name in tier_models().items():
         lines.append(f"  - {tier:5} -> {name}")
     lines.append(
         "\nGuidance: use `code` for real code generation/analysis, "
         "`cheap` for summaries/classification/commit drafts. Trivial "
-        "one-liners aren't worth delegating — do them inline."
+        "one-liners aren't worth delegating — do them inline. Pass input "
+        "files by path via `files` — never paste their content into the "
+        "prompt."
     )
     return "\n".join(lines)
+
+
+def read_files(paths):
+    """Read local files into prompt blocks. Returns (blocks, error)."""
+    blocks, budget = [], MAX_INPUT_CHARS
+    for p in paths:
+        full = os.path.expanduser(str(p))
+        try:
+            with open(full, encoding="utf-8", errors="replace") as f:
+                content = f.read(budget + 1)
+        except OSError as e:
+            return None, f"ERROR: cannot read file '{p}': {e}"
+        note = ""
+        if len(content) > budget:
+            content = content[:budget]
+            note = f"\n[... truncated: {MAX_INPUT_CHARS}-char total budget reached]"
+        budget -= len(content)
+        blocks.append(f"=== FILE: {p} ===\n{content}{note}")
+        if budget <= 0:
+            break
+    return blocks, None
 
 
 def tool_run(args):
@@ -99,38 +138,76 @@ def tool_run(args):
     if not prompt:
         return "ERROR: `prompt` is required."
     model = args.get("model", "code")
-    model = TIER_MODELS.get(model, model)  # allow tier alias or raw name
+    model = tier_models().get(model, model)  # allow tier alias or raw name
     system = args.get("system")
     temperature = args.get("temperature", 0.2)
+    think = bool(args.get("think", False))
+    save_to = args.get("save_to")
     try:
         max_tokens = max(1, int(args.get("max_tokens", DEFAULT_MAX_TOKENS)))
     except (TypeError, ValueError):
         max_tokens = DEFAULT_MAX_TOKENS
+
+    # Inject file content server-side so the caller never pays tokens for it.
+    files = args.get("files") or []
+    if files:
+        blocks, err = read_files(files)
+        if err:
+            return err
+        prompt = "\n\n".join(blocks) + "\n\n=== TASK ===\n" + prompt
 
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
 
+    # Size the context to the actual input (~3 chars/token + output headroom)
+    # instead of relying on the server default, which may be tiny.
+    input_chars = len(prompt) + len(system or "")
+    num_ctx = min(MAX_NUM_CTX, max(16384, input_chars // 3 + max_tokens + 1024))
+
     payload = {
         "model": model,
         "messages": messages,
         "stream": False,
-        "options": {"temperature": temperature, "num_predict": max_tokens},
+        "think": think,  # off by default: delegation wants answers, not latency
+        "keep_alive": KEEP_ALIVE,
+        "options": {"temperature": temperature, "num_predict": max_tokens,
+                    "num_ctx": num_ctx},
     }
     try:
         resp = http_json("/api/chat", payload)
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", "replace")
-        return f"ERROR from Ollama ({e.code}) using model '{model}': {body}"
+        # Some models reject the `think` field outright — retry without it.
+        if "think" in body.lower():
+            payload.pop("think", None)
+            try:
+                resp = http_json("/api/chat", payload)
+            except Exception as e2:
+                return f"ERROR calling Ollama with model '{model}': {e2}"
+        else:
+            return f"ERROR from Ollama ({e.code}) using model '{model}': {body}"
     except Exception as e:
         return f"ERROR calling Ollama with model '{model}': {e}"
     content = resp.get("message", {}).get("content", "")
+
+    if save_to:
+        full = os.path.expanduser(str(save_to))
+        try:
+            with open(full, "w", encoding="utf-8") as f:
+                f.write(content)
+        except OSError as e:
+            return f"ERROR: model answered but writing '{save_to}' failed: {e}"
+        head = content[:500]
+        return (f"Saved {len(content)} chars to {save_to}. First lines:\n{head}"
+                + ("\n[...]" if len(content) > 500 else ""))
+
     if len(content) > MAX_OUTPUT_CHARS:
         content = (
             content[:MAX_OUTPUT_CHARS]
             + f"\n\n[output truncated at {MAX_OUTPUT_CHARS} chars — re-run with a "
-              "tighter prompt asking for a compact summary]"
+              "tighter prompt asking for a compact summary, or use `save_to`]"
         )
     return content or "(empty response)"
 
@@ -151,7 +228,9 @@ TOOLS = [
             "(free, no API tokens). Ideal for: summarizing long logs/files, "
             "classification, drafting commit messages, boilerplate, first-pass "
             "'grep-and-explain'. NOT for multi-step orchestration or critical "
-            "code. Returns only the model's text output."
+            "code. Pass input files via `files` (the server reads them locally "
+            "— never paste file content into the prompt). Returns only the "
+            "model's text output."
         ),
         "inputSchema": {
             "type": "object",
@@ -161,9 +240,15 @@ TOOLS = [
                     "type": "string",
                     "description": "Tier alias ('code','cheap') or a raw Ollama model name. Default 'code'.",
                 },
+                "files": {
+                    "type": "array", "items": {"type": "string"},
+                    "description": "Absolute paths of files to inject into the prompt, read server-side at zero caller cost. ALWAYS use this instead of pasting file content.",
+                },
                 "system": {"type": "string", "description": "Optional system prompt."},
                 "temperature": {"type": "number", "description": "Sampling temperature, default 0.2."},
                 "max_tokens": {"type": "number", "description": "Output token cap (num_predict), default 2048. Raise only for genuinely long outputs."},
+                "think": {"type": "boolean", "description": "Enable the model's thinking mode (default false — it mostly adds latency for grunt work)."},
+                "save_to": {"type": "string", "description": "Write the full output to this file instead of returning it; returns a short confirmation + preview. Use for bulky outputs the caller doesn't need verbatim."},
             },
             "required": ["prompt"],
             "additionalProperties": False,

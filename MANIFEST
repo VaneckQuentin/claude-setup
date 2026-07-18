@@ -8,6 +8,7 @@ claude/hooks/run-hook.sh
 claude/hooks/dispatch-directive.py
 claude/hooks/post-edit-lint.py
 claude/hooks/commit-guard.py
+claude/hooks/statusline.py
 claude/agents/explorer.md
 claude/agents/implementer.md
 claude/agents/reviewer.md

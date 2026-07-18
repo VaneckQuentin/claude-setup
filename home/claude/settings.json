@@ -1,6 +1,11 @@
 {
   "model": "claude-fable-5",
   "includeCoAuthoredBy": false,
+  "statusLine": {
+    "type": "command",
+    "command": "sh \"$HOME/.claude/hooks/run-hook.sh\" \"$HOME/.claude/hooks/statusline.py\"",
+    "padding": 0
+  },
   "hooks": {
     "UserPromptSubmit": [
       {

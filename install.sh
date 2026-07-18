@@ -65,6 +65,8 @@ chmod +x "$HOME/.claude/local-mode/claude-local" \
          "$HOME/.claude/local-mode/bootstrap-reverse.sh" \
          "$HOME/.claude/hooks/dispatch-directive.py" \
          "$HOME/.claude/hooks/post-edit-lint.py" \
+         "$HOME/.claude/hooks/commit-guard.py" \
+         "$HOME/.claude/hooks/statusline.py" \
          "$HOME/.claude/hooks/run-hook.sh" 2>/dev/null || true
 
 echo "== Registering ollama-delegate MCP (user scope)"
@@ -163,8 +165,42 @@ else
   esac
 fi
 
+echo "== Claude plan profile (hybrid subagent models)"
+SYNCED=0
+apply_plan() {
+  if "$HOME/.claude/local-mode/sync-local.sh" --plan "$1"; then SYNCED=1
+  else echo "  preset failed — run sync-local.sh --plan $1 manually." >&2; fi
+}
+if [[ "$NO_MODELS" != 1 && -t 0 ]]; then
+  echo "  Bigger Claude plans can afford stronger subagent models. Presets:"
+  echo "    [1] pro     — haiku recon, sonnet for everything else"
+  echo "    [2] max100  — opus for review/reverse (repo default)"
+  echo "    [3] max200  — sonnet recon, opus implementation, fable review"
+  printf "  Apply a preset? [1/2/3/k(eep current), default k]: "
+  read -r plan
+  case "${plan:-k}" in
+    1) apply_plan pro ;;
+    2) apply_plan max100 ;;
+    3) apply_plan max200 ;;
+    *) echo "  keeping current claude.* assignments." ;;
+  esac
+else
+  echo "  keeping current claude.* assignments (later: sync-local.sh --plan pro|max100|max200)."
+fi
+
+echo "== Pre-warming Playwright MCP (browser agents)"
+if command -v npx >/dev/null; then
+  (npx -y "@playwright/mcp@latest" --version >/dev/null 2>&1 || true) &
+  echo "  fetching @playwright/mcp in the background (speeds up the first browser-agent spawn)."
+  echo "  Chromium itself, if missing:  npx playwright install chromium"
+else
+  echo "  skipped — node/npx not found (only the browser agents need them)."
+fi
+
 echo "== Syncing roles (agents frontmatter, models.env, tiers.json)"
-if curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
+if [[ "$SYNCED" == 1 ]]; then
+  echo "  already synced by the plan preset above."
+elif curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
   "$HOME/.claude/local-mode/sync-local.sh"
 else
   echo "  Ollama not running — run ~/.claude/local-mode/sync-local.sh once it is."

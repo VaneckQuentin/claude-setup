@@ -1,0 +1,18 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repo self-checks (syntax, JSON, MANIFEST)
+        run: bash tests/lint.sh
+      - name: shellcheck
+        run: |
+          # -S warning: errors + warnings only; style/info notes stay advisory.
+          git ls-files '*.sh' | xargs shellcheck -S warning
+          shellcheck -S warning home/claude/local-mode/claude-local

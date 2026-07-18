@@ -7,6 +7,9 @@
 #
 #   ~/.claude/local-mode/sync-local.sh            apply roles.conf
 #   ~/.claude/local-mode/sync-local.sh --detect   list models + role suggestions
+#   ~/.claude/local-mode/sync-local.sh --plan X   set hybrid subagent models to
+#                                                 a Claude-plan preset, then sync
+#                                                 (X = pro | max100 | max200)
 set -euo pipefail
 
 DIR="$HOME/.claude/local-mode"
@@ -25,14 +28,37 @@ if [[ "${1:-}" == "--detect" ]]; then
   installed_models | while read -r m; do
     lc=$(echo "$m" | tr '[:upper:]' '[:lower:]'); role="general"
     case "$lc" in
-      *coder*|*code*) role="code / orchestrator" ;;
-      *deepseek*|*qwen*) role="code / reverse (strong reasoners)" ;;
-      *gemma*|*phi*|*mini*|*3b*|*7b*|*8b*) role="cheap / explore (fast)" ;;
+      *dolphin*|*uncensored*|*abliterated*) role="uncensored ollama_run passes (usually NO tool support)" ;;
+      *laguna*|*coder*|*devstral*|*deepseek*) role="orchestrator / code / tier.code (agentic coder)" ;;
+      *gemma*|*phi*|*mini*|*qwen*|*3b*|*7b*|*8b*|*12b*) role="explore / cheap / tier.cheap (fast)" ;;
     esac
     printf "  %-32s -> %s\n" "$m" "$role"
   done
   echo; echo "Edit $CONF to assign, then run without --detect."
   exit 0
+fi
+
+# --plan: rewrite the claude.* lines to a preset matched to the Claude
+# subscription's budget, then fall through to a normal sync.
+if [[ "${1:-}" == "--plan" ]]; then
+  case "${2:-}" in
+    pro)    ex=haiku;  im=sonnet; rv=sonnet; re=sonnet; br=sonnet ;;
+    max100) ex=haiku;  im=sonnet; rv=opus;   re=opus;   br=sonnet ;;
+    max200) ex=sonnet; im=opus;   rv=fable;  re=fable;  br=sonnet ;;
+    *) echo "Usage: sync-local.sh --plan pro|max100|max200" >&2; exit 1 ;;
+  esac
+  set_claude_role() { # <role-suffix> <model> — rewrite one claude.* line in place
+    awk -v re="^[[:space:]]*claude\\.$1[[:space:]]*=" -v m="$2" \
+      '$0 ~ re { sub(/=[[:space:]]*[^#[:space:]]+/, "= " m) } { print }' \
+      "$CONF" > "$CONF.tmp" && mv "$CONF.tmp" "$CONF"
+  }
+  set_claude_role explorer         "$ex"
+  set_claude_role implementer      "$im"
+  set_claude_role reviewer         "$rv"
+  set_claude_role reverse-engineer "$re"
+  set_claude_role browser-headless "$br"
+  set_claude_role browser-headed   "$br"
+  echo "Applied plan preset '$2' to claude.* roles in roles.conf."
 fi
 
 [[ -f "$CONF" ]] || { echo "ERROR: $CONF not found." >&2; exit 1; }

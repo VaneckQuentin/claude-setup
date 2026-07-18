@@ -17,12 +17,15 @@ offload**. Follow the dispatch rules below.
 
 ALL model assignments (full-local roles, `ollama_run` tiers, hybrid subagent
 Claude models) live in `roles.conf` — edit it, then run `sync-local.sh`. Never
-assume concrete model names from memory.
+assume concrete model names from memory. Subagent Claude models follow the
+user's plan budget (`sync-local.sh --plan pro|max100|max200`).
 
 The dispatch rules below apply in BOTH modes. The `ollama-delegate` MCP is the
 universal "submodel per task" mechanism and works in either mode.
 
 ## Dispatch rules (default reasoning before acting)
+
+(Condensed copy in hooks/dispatch-directive.py — keep the two in sync.)
 
 Before doing volume work yourself, ask: *does this output need to live in my
 premium context, or just its conclusion?* If only the conclusion matters,
@@ -41,6 +44,9 @@ delegate.
    draft a commit message, boilerplate, first-pass "grep-and-explain") →
    delegate to a LOCAL model via the `ollama_run` tool. This costs ZERO API
    tokens. Use `model:"cheap"` for text, `model:"code"` for code-ish work.
+   Pass input files by path via `files` (the server reads them locally) —
+   NEVER read a file into your context just to paste it into the prompt.
+   For bulky outputs you don't need verbatim, use `save_to`.
 5. **Code navigation** → prefer Serena symbol tools (`find_symbol`,
    `get_symbols_overview`, `find_referencing_symbols`) over reading whole files.
 6. **Real-browser work** (verify a UI change end-to-end, or any task needing a
@@ -107,6 +113,10 @@ Drop exploration transcripts and raw tool output first — never the above.
   when notified.
 - Local models (`ollama_run`) never review or judge — they do volume only.
   Review quality is the one place not to save.
+- Review quality is RELATIVE: never review a change with a model weaker than
+  the one that wrote it. The `reviewer` default fits implementer output; when
+  YOU (the orchestrator) authored a high-stakes diff inline, spawn the
+  reviewer with a `model` override matching your own tier.
 
 ## Feature workflow (multi-file changes)
 

@@ -7,6 +7,9 @@ hook only guarantees it considers routing on every request.
 
 Fail-open and near-zero cost: static text, no network, no local model.
 Kill switch: set env CLAUDE_AUTODISPATCH=0 to disable.
+
+NOTE: DIRECTIVE is a condensed copy of the dispatch rules in CLAUDE.md —
+if you change the rules there, mirror the change here (and vice versa).
 """
 import json
 import os
@@ -19,7 +22,7 @@ Split this request into (a) EXPLORATION (finding/reading/searching code) and (b)
 1. EXPLORATION — delegate to the `explorer` subagent (haiku) ONLY when it is genuinely heavy: reading/searching more than ~5 files, or scanning large files/logs. Reason over the summary it returns instead of pulling all that into this context. For light lookups (≤ ~5 small files) just read them yourself — delegating there only adds latency.
 2. one scoped code change (a function, a fix)               -> `implementer` subagent (sonnet)
 3. hard reasoning (architecture, tricky bug, diff review)   -> `reviewer` subagent (opus) or handle inline
-4. bulk grunt text (summarize a long file/log, classify, draft) -> `ollama_run` tool (local, free)
+4. bulk grunt text (summarize a long file/log, classify, draft) -> `ollama_run` tool (local, free) — pass inputs by path via `files`, never paste content
 
 Spawn independent subtasks in parallel; only conclusions return here. If the whole request is one trivial step, ignore this and just answer directly — do NOT over-decompose."""
 

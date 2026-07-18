@@ -9,7 +9,8 @@ personal data live here — install it, log in, and it works.
 | Piece | Files |
 |---|---|
 | Global rules (dispatch, language, pipelines) | `home/claude/CLAUDE.md` |
-| Settings: model, effort, hooks, LSP plugins | `home/claude/settings.json` |
+| Settings: model, effort, hooks, statusline, LSP plugins | `home/claude/settings.json` |
+| Statusline (model, branch, cost, context %) | `home/claude/hooks/statusline.py` |
 | Dispatch hook (bulk-intent gate, FR+EN) | `home/claude/hooks/dispatch-directive.py` |
 | Post-edit lint hook (token-free syntax checks) | `home/claude/hooks/post-edit-lint.py` |
 | Hybrid subagents (haiku/sonnet/opus tiers) | `home/claude/agents/*.md` |
@@ -41,6 +42,11 @@ per-project Serena registrations (see below), the Ollama model weights.
    from ~36 GB) and asks whether to download them, customize each purpose
    with your own Ollama tags, or skip. Non-interactive: `--with-models`
    pulls the roles.conf set (tens of GB), `--no-models` skips.
+
+   It also asks which **Claude plan preset** to apply — bigger plans can
+   afford stronger subagent models (`pro`: haiku/sonnet, `max100`: opus for
+   review, `max200`: opus implementation + fable review). Change it any time
+   with `~/.claude/local-mode/sync-local.sh --plan pro|max100|max200`.
 
 3. `claude` once to log in.
 4. In each big codebase (symbol navigation worth ~30 tool schemas/session):
@@ -87,3 +93,9 @@ by cmd: Claude Code runs shell-form hooks through **Git Bash** when installed
 Everything is driven by `home/claude/local-mode/roles.conf` (full-local roles,
 `ollama_run` tiers, hybrid subagent Claude models). Edit it, run
 `~/.claude/local-mode/sync-local.sh`, then `./capture.sh` + commit.
+Claude-plan presets: `sync-local.sh --plan pro|max100|max200`.
+
+Full-local note: the Ollama *server* context length must be ≥64K for
+`claude --local` (Ollama app → Settings → Context length, or
+`OLLAMA_CONTEXT_LENGTH=131072 ollama serve`) — the launcher warns if it looks
+too small. `ollama_run` delegations size their own context per request.
