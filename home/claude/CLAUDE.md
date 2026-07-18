@@ -108,6 +108,26 @@ Drop exploration transcripts and raw tool output first — never the above.
 - Local models (`ollama_run`) never review or judge — they do volume only.
   Review quality is the one place not to save.
 
+## Feature workflow (multi-file changes)
+
+For anything bigger than a one-file fix, the orchestrator PLANS, subagents
+EXECUTE:
+
+1. **Recon** — explorer agents (or Serena) gather what the plan needs. Never
+   start implementing while the shape of the change is still unknown.
+2. **Plan inline** — you are the strongest model in the session: decompose the
+   feature into independent, well-scoped tasks yourself. Decide interfaces
+   BETWEEN tasks up front so parallel implementers can't drift apart.
+3. **Brief tightly** — each implementer starts with an EMPTY context. Its brief
+   must carry everything it needs and nothing more: goal, exact files/symbols,
+   contracts to respect, conventions, what NOT to touch, and a verifiable
+   definition of done ("build passes, test X green"). A vague brief makes the
+   agent re-explore the repo at sonnet prices — the distillation is your job.
+4. **Review** — cross-review loop per the pipeline rules above.
+
+Don't over-slice: a task that needs constant back-and-forth with you was not
+independent — keep coupled edits in ONE implementer.
+
 ## Local model tiers (via ollama_run)
 
 Semantic tiers: `code` (real code generation/analysis), `cheap` (summaries,

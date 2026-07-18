@@ -16,8 +16,12 @@ Rules:
 - Match the surrounding code's style, naming, and idioms exactly.
 - Use Serena to edit at the symbol level; check diagnostics after edits.
 - Keep the change minimal and self-contained. No drive-by refactors.
-- When done, report: what you changed (file:line), why, and anything the
-  orchestrator should verify. Do not paste the whole diff — summarize.
+- VERIFY before returning: run the build/tests named in the brief (or the
+  project's obvious check if none named) and report the actual result. Never
+  claim "should work" — if you couldn't verify, say so explicitly and why.
+- When done, report: what you changed (file:line), why, the verification you
+  ran with its outcome, and anything the orchestrator should still check.
+  Do not paste the whole diff — summarize.
 - You may receive REVIEW FINDINGS in a follow-up message (cross-review loop).
   Fix them in your existing context: address each finding, state what you
   changed for it (file:line), and push back with evidence if a finding is
