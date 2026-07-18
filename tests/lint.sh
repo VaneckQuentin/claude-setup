@@ -5,7 +5,7 @@
 #   silently skip anything missing from MANIFEST — drift there is the real
 #   failure mode).
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 fail=0
 
 echo "== shell syntax (bash -n)"
