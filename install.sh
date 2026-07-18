@@ -49,15 +49,39 @@ while IFS= read -r rel; do
   dest="$(map_dest "$rel")"
   [[ -f "$src" ]] || { echo "WARNING: $src missing in repo, skipping." >&2; continue; }
   mkdir -p "$(dirname "$dest")"
+  BACKUP=""
   if [[ -f "$dest" ]] && ! cmp -s "$src" "$dest"; then
     case "$rel" in
       */CLAUDE.md|*/settings.json|*settings.json|*CLAUDE.md)
         cp "$dest" "$dest.bak.$STAMP"
+        BACKUP="$dest.bak.$STAMP"
         echo "  backed up existing $(basename "$dest") -> $dest.bak.$STAMP" ;;
     esac
   fi
   cp "$src" "$dest"
   echo "  installed $dest"
+  # Preserve a machine-local top-level "model" pin across settings.json
+  # upgrades (the repo file doesn't ship one). Fail-soft: never abort install.
+  if [[ -n "$BACKUP" && "$rel" == *settings.json ]]; then
+    python3 - "$BACKUP" "$dest" <<'PY' || true
+import json, sys
+try:
+    bak_path, dest_path = sys.argv[1], sys.argv[2]
+    with open(bak_path) as f:
+        old = json.load(f)
+    # "claude-fable-5" was only ever the repo's OLD shipped default, not a
+    # deliberate user choice — don't resurrect it on upgrade.
+    if isinstance(old, dict) and "model" in old and old["model"] != "claude-fable-5":
+        with open(dest_path) as f:
+            new = json.load(f)
+        new["model"] = old["model"]
+        with open(dest_path, "w") as f:
+            json.dump(new, f, indent=2)
+            f.write("\n")
+except Exception:
+    pass
+PY
+  fi
 done < "$REPO/MANIFEST"
 
 chmod +x "$HOME/.claude/local-mode/claude-local" \
@@ -80,15 +104,28 @@ if command -v claude >/dev/null; then
   command -v cygpath >/dev/null && SRV="$(cygpath -w "$SRV")"
   claude mcp remove -s user ollama-delegate >/dev/null 2>&1 || true
   claude mcp add -s user ollama-delegate -- "$PYBIN" "$SRV"
+  # Also register in the claude-local config dir so `claude --local` sessions
+  # (CLAUDE_CONFIG_DIR=~/.claude-local) get the server too. That dir may never
+  # have been initialized, so guard both calls — a failure here must not
+  # abort install (mirrors the "remove" pair's `|| true` tolerance above).
+  CLAUDE_CONFIG_DIR="$HOME/.claude-local" claude mcp remove -s user ollama-delegate >/dev/null 2>&1 || true
+  CLAUDE_CONFIG_DIR="$HOME/.claude-local" claude mcp add -s user ollama-delegate -- "$PYBIN" "$SRV" \
+    || echo "  WARNING: local-mode MCP registration failed — run manually later: CLAUDE_CONFIG_DIR=~/.claude-local claude mcp add -s user ollama-delegate -- $PYBIN $SRV"
 else
-  echo "  skipped ('claude' not found). Later: claude mcp add -s user ollama-delegate -- python3 ~/.claude/mcp-servers/ollama-delegate/server.py"
+  echo "  skipped ('claude' not found). Later, for both modes: claude mcp add -s user ollama-delegate -- python3 ~/.claude/mcp-servers/ollama-delegate/server.py"
+  echo "  and: CLAUDE_CONFIG_DIR=~/.claude-local claude mcp add -s user ollama-delegate -- python3 ~/.claude/mcp-servers/ollama-delegate/server.py"
 fi
 
 echo "== shell wrapper (claude --local)"
-# The function body is bash/zsh compatible; pick whichever rc the machine uses.
-RC="$HOME/.zshrc"
-[[ -f "$RC" ]] || RC="$HOME/.bashrc"
-if [[ -f "$RC" ]] && grep -q "local-mode/claude-local" "$RC"; then
+# The function body is bash/zsh compatible; pick the rc matching the login
+# shell (macOS defaults to zsh, so don't just fall back to .bashrc there).
+case "$(basename "${SHELL:-}")" in
+  zsh)  RC="$HOME/.zshrc" ;;
+  bash) RC="$HOME/.bashrc" ;;
+  *)    RC="$HOME/.profile" ;;
+esac
+[[ -f "$RC" ]] || touch "$RC"
+if grep -q "local-mode/claude-local" "$RC"; then
   echo "  already present in $RC"
 else
   { echo ""; cat "$REPO/shell/claude-wrapper.zsh"; } >> "$RC"
@@ -117,7 +154,7 @@ set_role_model() {
 
 pull_role_models() {
   list_role_models | awk '{print $2}' | sort -u | while read -r m; do
-    ollama pull "$m"
+    ollama pull "$m" || echo "  WARNING: pull failed for $m — pull manually and re-run sync-local.sh"
   done
 }
 

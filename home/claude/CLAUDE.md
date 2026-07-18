@@ -32,10 +32,10 @@ premium context, or just its conclusion?* If only the conclusion matters,
 delegate.
 
 1. **Broad read/search** ("where is X", "how is Y wired", "list all Z") →
-   spawn the `explorer` subagent (haiku). Never read 10+ files into the main
-   context yourself.
+   spawn the `explorer` subagent (recon tier). Never read 10+ files into the
+   main context yourself.
 2. **Scoped code change** (a decided fix/feature in PHP, Rust, etc.) → spawn the
-   `implementer` subagent (sonnet).
+   `implementer` subagent (implementation tier).
 3. **Hard reasoning** (architecture, tricky bug, diff review) → spawn the
    `reviewer` subagent when it needs heavy reading or an unbiased fresh
    context (e.g. reviewing work you just orchestrated); handle inline when

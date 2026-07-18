@@ -53,6 +53,15 @@ def personal_patterns(cwd):
     return pats
 
 
+def leading_cd_dir(command):
+    """`cd <dir> && git commit ...` (or `;`) commits in <dir>, not `cwd` —
+    return that dir (quotes tolerated), or None if there's no leading cd."""
+    m = re.match(r"""\s*cd\s+(?:'([^']*)'|"([^"]*)"|(\S+))\s*(?:&&|;)""", command)
+    if not m:
+        return None
+    return m.group(1) or m.group(2) or m.group(3)
+
+
 def added_lines(diff):
     return [l[1:] for l in diff.splitlines()
             if l.startswith("+") and not l.startswith("+++")]
@@ -95,7 +104,14 @@ def main():
         if not re.search(r"\bgit\b[^|;&]*\bcommit\b", command):
             return 0
         cwd = data.get("cwd") or os.getcwd()
-        include_unstaged = bool(re.search(r"\s-a(m|\b)", command))
+        try:
+            cd_dir = leading_cd_dir(command)
+            if cd_dir:
+                cd_dir = os.path.expanduser(cd_dir)
+                cwd = cd_dir if os.path.isabs(cd_dir) else os.path.normpath(os.path.join(cwd, cd_dir))
+        except Exception:
+            pass  # fail-open: fall back to the reported cwd
+        include_unstaged = bool(re.search(r"\s(-a(m|\b)|--all\b)", command))
 
     try:
         findings = scan(cwd, include_unstaged)

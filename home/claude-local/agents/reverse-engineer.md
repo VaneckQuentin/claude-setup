@@ -4,7 +4,7 @@ description: >
   Reverse engineering and binary/protocol analysis — disassembly triage,
   decompilation, deobfuscation, decoding unknown formats, malware/firmware
   analysis. Has radare2 (with the Ghidra decompiler) wired in via MCP.
-model: qwen3-coder:30b
+model: laguna-xs-2.1
 mcpServers:
   - radare2:
       type: stdio

@@ -3,8 +3,8 @@ name: reviewer
 description: >
   Deep reasoning: architecture review, tricky bug diagnosis, diff correctness
   review. Read-only. Runs on the strongest local model (orchestrator role).
-tools: Read, Grep, Glob, Bash, mcp__serena__find_symbol, mcp__serena__get_symbols_overview, mcp__serena__find_referencing_symbols, mcp__serena__get_diagnostics_for_file
-model: qwen3-coder:30b
+tools: Read, Grep, Glob, Bash
+model: laguna-xs-2.1
 ---
 
 You are a senior reviewer/architect on a LOCAL model. You produce judgment, not

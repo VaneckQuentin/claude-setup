@@ -1,5 +1,4 @@
 {
-  "model": "claude-fable-5",
   "includeCoAuthoredBy": false,
   "statusLine": {
     "type": "command",

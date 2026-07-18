@@ -40,12 +40,41 @@ python3 -c "import r2pipe" 2>/dev/null && ok "r2pipe present" || { pip3 install 
 
 # ---- 4. models -----------------------------------------------------------
 step "ollama models"
+DIR="$(cd "$(dirname "$0")" && pwd)"
+CONF="$DIR/roles.conf"
+
+# Unique Ollama tags referenced by roles.conf (plain + tier.* roles — same
+# parsing as install.sh's list_role_models; claude.* excluded, those are
+# Anthropic aliases, not Ollama tags). Keep this in sync with install.sh.
+list_role_models() {
+  awk -F= '!/^[[:space:]]*#/ && NF>=2 && $1 !~ /claude\./ {
+    role=$1; gsub(/[[:space:]]/,"",role);
+    val=$2; sub(/#.*/,"",val); gsub(/[[:space:]]/,"",val);
+    if (val != "") print role, val
+  }' "$CONF"
+}
+
 if curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
   present(){ curl -sf http://localhost:11434/api/tags | python3 -c "import sys,json;print('\n'.join(m['name'] for m in json.load(sys.stdin).get('models',[])))"; }
   AVAIL="$(present)"
-  for m in qwen3-coder-next:latest dolphin-mixtral:latest gemma4:latest; do
-    grep -qx "$m" <<<"$AVAIL" && ok "$m" || { echo "  pulling $m…"; ollama pull "$m" && ok "$m pulled"; }
-  done
+  if [ -f "$CONF" ]; then
+    MODELS="$(list_role_models | awk '{print $2}' | sort -u)"
+    # dolphin-mixtral is the uncensored `ollama_run` pass for reverse-engineer
+    # (see the reverse-role comment in roles.conf) — not a role= value itself.
+    if grep -q "dolphin-mixtral" "$CONF"; then
+      MODELS="$(printf '%s\ndolphin-mixtral:latest\n' "$MODELS" | sort -u)"
+    fi
+  else
+    warn "$CONF not found — falling back to the legacy hardcoded model list"
+    MODELS="qwen3-coder-next:latest
+dolphin-mixtral:latest
+gemma4:latest"
+  fi
+  while IFS= read -r m; do
+    [ -n "$m" ] || continue
+    tag="$m"; case "$tag" in *:*) ;; *) tag="$tag:latest" ;; esac
+    grep -qx "$tag" <<<"$AVAIL" && ok "$tag" || { echo "  pulling $tag…"; ollama pull "$tag" && ok "$tag pulled"; }
+  done <<<"$MODELS"
   if [ "$DECOMPILER" = 1 ]; then
     m="MHKetbi/llm4decompile-22b-v2"
     grep -q "^$m" <<<"$AVAIL" && ok "$m" || { echo "  pulling $m (large)…"; ollama pull "$m" && ok "$m pulled"; }

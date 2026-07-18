@@ -18,8 +18,7 @@ roles.conf (applied via sync-local.sh):
   `model:"cheap"` for text or `model:"code"` for code-ish.
 
 You (the orchestrator) run on the `orchestrator` model. Break work into small,
-verifiable steps and hand each to the right role. Prefer Serena symbol tools
-over reading whole files.
+verifiable steps and hand each to the right role.
 
 ## What NOT to do
 

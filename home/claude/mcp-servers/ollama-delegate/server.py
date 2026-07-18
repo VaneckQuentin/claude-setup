@@ -23,7 +23,9 @@ DEFAULT_TIMEOUT = 600      # seconds; big models can be slow on first token
 DEFAULT_MAX_TOKENS = 2048  # num_predict cap — delegation returns conclusions, not dumps
 MAX_OUTPUT_CHARS = 20000   # hard cap on what flows back into the caller's context
 MAX_INPUT_CHARS = 300000   # total cap on injected file content (~75-90K tokens)
-KEEP_ALIVE = "30m"         # keep the model loaded between delegations in a session
+# Keep the model loaded between delegations in a session. Overridable via env
+# since big models held warm cost RAM — lower it (or set to "0") on tight boxes.
+KEEP_ALIVE = os.environ.get("OLLAMA_DELEGATE_KEEP_ALIVE", "30m")
 MAX_NUM_CTX = 131072       # request-level context ceiling (KV cache is RAM)
 
 # Semantic tiers -> concrete local models. Source of truth is
@@ -115,7 +117,11 @@ def tool_list_models(_args):
 def read_files(paths):
     """Read local files into prompt blocks. Returns (blocks, error)."""
     blocks, budget = [], MAX_INPUT_CHARS
+    omitted = []
     for p in paths:
+        if budget <= 0:
+            omitted.append(str(p))
+            continue
         full = os.path.expanduser(str(p))
         try:
             with open(full, encoding="utf-8", errors="replace") as f:
@@ -128,8 +134,11 @@ def read_files(paths):
             note = f"\n[... truncated: {MAX_INPUT_CHARS}-char total budget reached]"
         budget -= len(content)
         blocks.append(f"=== FILE: {p} ===\n{content}{note}")
-        if budget <= 0:
-            break
+    if omitted:
+        blocks.append(
+            f"=== {len(omitted)} file(s) omitted (input budget reached): "
+            + ", ".join(omitted) + " ==="
+        )
     return blocks, None
 
 

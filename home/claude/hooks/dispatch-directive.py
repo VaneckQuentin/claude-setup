@@ -19,9 +19,9 @@ import unicodedata
 DIRECTIVE = """## Dispatch protocol (apply before acting)
 Split this request into (a) EXPLORATION (finding/reading/searching code) and (b) REASONING/EDITING. Then route to the cheapest capable target — never redo delegated work yourself:
 
-1. EXPLORATION — delegate to the `explorer` subagent (haiku) ONLY when it is genuinely heavy: reading/searching more than ~5 files, or scanning large files/logs. Reason over the summary it returns instead of pulling all that into this context. For light lookups (≤ ~5 small files) just read them yourself — delegating there only adds latency.
-2. one scoped code change (a function, a fix)               -> `implementer` subagent (sonnet)
-3. hard reasoning (architecture, tricky bug, diff review)   -> `reviewer` subagent (opus) or handle inline
+1. EXPLORATION — delegate to the `explorer` subagent (recon tier) ONLY when it is genuinely heavy: reading/searching 10+ files, or scanning large files/logs. Reason over the summary it returns instead of pulling all that into this context. For light lookups (fewer than 10 small files) just read them yourself — delegating there only adds latency.
+2. one scoped code change (a function, a fix)               -> `implementer` subagent (implementation tier)
+3. hard reasoning (architecture, tricky bug, diff review)   -> `reviewer` subagent or handle inline
 4. bulk grunt text (summarize a long file/log, classify, draft) -> `ollama_run` tool (local, free) — pass inputs by path via `files`, never paste content
 
 Spawn independent subtasks in parallel; only conclusions return here. If the whole request is one trivial step, ignore this and just answer directly — do NOT over-decompose."""
