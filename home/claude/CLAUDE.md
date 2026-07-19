@@ -18,7 +18,8 @@ offload**. Follow the dispatch rules below.
 ALL model assignments (full-local roles, `ollama_run` tiers, hybrid subagent
 Claude models) live in `roles.conf` — edit it, then run `sync-local.sh`. Never
 assume concrete model names from memory. Subagent Claude models follow the
-user's plan budget (`sync-local.sh --plan pro|max100|max200`).
+user's plan budget (`sync-local.sh --plan eco|balanced|best`; old names
+pro|max100|max200 still work).
 
 The dispatch rules below apply in BOTH modes. The `ollama-delegate` MCP is the
 universal "submodel per task" mechanism and works in either mode.

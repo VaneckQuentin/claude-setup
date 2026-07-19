@@ -9,7 +9,11 @@
 #   ~/.claude/local-mode/sync-local.sh --detect   list models + role suggestions
 #   ~/.claude/local-mode/sync-local.sh --plan X   set hybrid subagent models to
 #                                                 a Claude-plan preset, then sync
-#                                                 (X = pro | max100 | max200)
+#                                                 (X = eco | balanced | best;
+#                                                 recommended for Pro | Max
+#                                                 5x/$100 | Max 20x/$200 resp.;
+#                                                 old names pro|max100|max200
+#                                                 still work)
 set -euo pipefail
 
 DIR="$HOME/.claude/local-mode"
@@ -42,10 +46,16 @@ fi
 # subscription's budget, then fall through to a normal sync.
 if [[ "${1:-}" == "--plan" ]]; then
   case "${2:-}" in
-    pro)    ex=haiku;  im=sonnet; rv=sonnet; re=sonnet; br=sonnet ;;
-    max100) ex=haiku;  im=sonnet; rv=opus;   re=opus;   br=sonnet ;;
-    max200) ex=sonnet; im=opus;   rv=fable;  re=fable;  br=sonnet ;;
-    *) echo "Usage: sync-local.sh --plan pro|max100|max200" >&2; exit 1 ;;
+    eco|pro)         ex=haiku;  im=sonnet; rv=sonnet; re=sonnet; br=sonnet ;;
+    balanced|max100) ex=haiku;  im=sonnet; rv=opus;   re=opus;   br=sonnet ;;
+    best|max200)     ex=sonnet; im=opus;   rv=fable;  re=fable;  br=sonnet ;;
+    *)
+      echo "Usage: sync-local.sh --plan eco|balanced|best" >&2
+      echo "  eco       (recommended for Claude Pro)          haiku recon, sonnet everything else" >&2
+      echo "  balanced  (recommended for Max 5x/\$100)          opus for review/reverse" >&2
+      echo "  best      (recommended for Max 20x/\$200)         sonnet recon, opus implementation, fable review" >&2
+      echo "  (old names pro|max100|max200 still work as aliases)" >&2
+      exit 1 ;;
   esac
   set_claude_role() { # <role-suffix> <model> — rewrite one claude.* line in place
     awk -v re="^[[:space:]]*claude\\.$1[[:space:]]*=" -v m="$2" \

@@ -210,19 +210,19 @@ apply_plan() {
 }
 if [[ "$NO_MODELS" != 1 && -t 0 ]]; then
   echo "  Bigger Claude plans can afford stronger subagent models. Presets:"
-  echo "    [1] pro     — haiku recon, sonnet for everything else"
-  echo "    [2] max100  — opus for review/reverse (repo default)"
-  echo "    [3] max200  — sonnet recon, opus implementation, fable review"
+  echo "    [1] eco       — recommended for Claude Pro: haiku recon, sonnet for everything else"
+  echo "    [2] balanced  — recommended for Max 5x/\$100: opus for review/reverse (repo default)"
+  echo "    [3] best      — recommended for Max 20x/\$200: sonnet recon, opus implementation, fable review"
   printf "  Apply a preset? [1/2/3/k(eep current), default k]: "
   read -r plan
   case "${plan:-k}" in
-    1) apply_plan pro ;;
-    2) apply_plan max100 ;;
-    3) apply_plan max200 ;;
+    1) apply_plan eco ;;
+    2) apply_plan balanced ;;
+    3) apply_plan best ;;
     *) echo "  keeping current claude.* assignments." ;;
   esac
 else
-  echo "  keeping current claude.* assignments (later: sync-local.sh --plan pro|max100|max200)."
+  echo "  keeping current claude.* assignments (later: sync-local.sh --plan eco|balanced|best; old names pro|max100|max200 still work)."
 fi
 
 echo "== Pre-warming Playwright MCP (browser agents)"
