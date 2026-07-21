@@ -12,9 +12,11 @@ Tools:
 
 Protocol: MCP over stdio, newline-delimited JSON-RPC 2.0. Stdlib only.
 """
+import fnmatch
 import json
 import os
 import sys
+import tempfile
 import urllib.request
 import urllib.error
 
@@ -89,6 +91,86 @@ def ollama_tags():
         return json.loads(r.read().decode("utf-8"))
 
 
+# ---- path confinement ------------------------------------------------------
+# `save_to` is an arbitrary-write surface and `files` is an exfiltration
+# surface — both are reachable from whatever prompted the delegation, so they
+# get confined even though this server only ever talks to localhost Ollama.
+
+# Sensitive locations under $HOME that `files` must never read from/expose.
+SENSITIVE_READ_DIRS = (
+    ".ssh", ".aws", ".gnupg", ".claude", ".claude-local", ".config",
+)
+SENSITIVE_READ_FILES = (".claude.json", ".git-credentials")
+# Denylist on basename — credentials-shaped files anywhere, not just $HOME.
+SENSITIVE_BASENAME_PATTERNS = (
+    ".env", ".env.*", "*_rsa", "*_ed25519", "*_ecdsa", "*_dsa",
+    "*.pem", "*.key", ".pgpass", "credentials", "credentials.json", ".netrc",
+    ".npmrc", ".pypirc", "*.p12", "*.pfx",
+)
+
+
+def write_bases():
+    """Directories `save_to` is allowed to write under (all realpath'd)."""
+    bases = [os.path.realpath(os.getcwd())]
+    for p in (tempfile.gettempdir(), "/tmp", "/private/tmp"):
+        bases.append(os.path.realpath(p))
+    extra = os.environ.get("OLLAMA_DELEGATE_WRITE_DIRS", "")
+    for d in extra.split(":"):
+        d = d.strip()
+        if d:
+            bases.append(os.path.realpath(os.path.expanduser(d)))
+    return list(dict.fromkeys(bases))  # dedupe, keep order
+
+
+def _is_under(path, base):
+    return path == base or path.startswith(base + os.sep)
+
+
+def validate_save_path(path, bases=None):
+    """Resolve `path` and confine it to an allowed write base.
+
+    Returns the resolved absolute path, or raises ValueError with a clear
+    message if `path` (after expanduser + realpath, so symlinks and `..`
+    can't escape) falls outside cwd / the system temp dir / configured
+    extra write dirs.
+    """
+    if bases is None:
+        bases = write_bases()
+    resolved = os.path.realpath(os.path.expanduser(str(path)))
+    if any(_is_under(resolved, base) for base in bases):
+        return resolved
+    raise ValueError(
+        f"refusing to write to '{path}': outside allowed locations "
+        "(process cwd, system temp dir, or $OLLAMA_DELEGATE_WRITE_DIRS)"
+    )
+
+
+def validate_read_path(path, home=None):
+    """Resolve `path` and reject reads of sensitive files/directories.
+
+    Denylist, not allowlist: rejects known-sensitive locations under
+    `home` (~/.ssh, ~/.aws, ~/.gnupg, ~/.claude, ~/.claude-local, ~/.config,
+    ~/.claude.json, ~/.git-credentials) and credentials-shaped basenames
+    (*.pem, *_rsa, .env, .npmrc, *.p12, etc.) anywhere. Everything else is
+    allowed through unchanged.
+    """
+    home = os.path.realpath(os.path.expanduser(str(home) if home else "~"))
+    resolved = os.path.realpath(os.path.expanduser(str(path)))
+    for d in SENSITIVE_READ_DIRS:
+        if _is_under(resolved, os.path.join(home, d)):
+            raise ValueError(f"refusing to read '{path}': sensitive directory")
+    for f in SENSITIVE_READ_FILES:
+        if resolved == os.path.join(home, f):
+            raise ValueError(f"refusing to read '{path}': sensitive file")
+    basename = os.path.basename(resolved)
+    for pattern in SENSITIVE_BASENAME_PATTERNS:
+        if fnmatch.fnmatch(basename, pattern):
+            raise ValueError(
+                f"refusing to read '{path}': matches sensitive filename pattern"
+            )
+    return resolved
+
+
 # ---- tool implementations -------------------------------------------------
 
 def tool_list_models(_args):
@@ -123,6 +205,10 @@ def read_files(paths):
             omitted.append(str(p))
             continue
         full = os.path.expanduser(str(p))
+        try:
+            validate_read_path(full)
+        except ValueError as e:
+            return None, f"ERROR: cannot read file '{p}': {e}"
         try:
             with open(full, encoding="utf-8", errors="replace") as f:
                 content = f.read(budget + 1)
@@ -202,7 +288,10 @@ def tool_run(args):
     content = resp.get("message", {}).get("content", "")
 
     if save_to:
-        full = os.path.expanduser(str(save_to))
+        try:
+            full = validate_save_path(save_to)
+        except ValueError as e:
+            return f"ERROR: model answered but writing '{save_to}' failed: {e}"
         try:
             with open(full, "w", encoding="utf-8") as f:
                 f.write(content)
@@ -327,6 +416,9 @@ def main():
         try:
             msg = json.loads(line)
         except json.JSONDecodeError:
+            resp = make_error(None, -32700, "Parse error")
+            sys.stdout.write(json.dumps(resp) + "\n")
+            sys.stdout.flush()
             continue
         try:
             resp = handle(msg)

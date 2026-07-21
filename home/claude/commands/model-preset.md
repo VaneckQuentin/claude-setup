@@ -26,7 +26,7 @@ If `$ARGUMENTS` is not empty:
 1. Validate it is one of `eco`, `balanced`, `best` (or the legacy aliases
    `pro`, `max100`, `max200`). If it isn't, report the valid values above and
    stop without running anything.
-2. Run: `sh "$HOME/.claude/local-mode/sync-local.sh" --plan $ARGUMENTS`
+2. Run: `bash "$HOME/.claude/local-mode/sync-local.sh" --plan $ARGUMENTS`
 3. Read `~/.claude/local-mode/roles.conf` again and print the resulting
    `claude.*` lines as confirmation of what changed.
 4. Remind the user this only changed subagent models — use `/model` to

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-statusLine command — one dense line: model | branch (or dir) | cost | context %.
+statusLine command — one dense line: model | branch (or dir) | plan usage
+(5h/7d %, falling back to $cost under API billing) | context %.
 
 Token discipline is this setup's core theme; the statusline makes it
 observable (when to compact, when to delegate) instead of guessed.

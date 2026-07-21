@@ -35,6 +35,22 @@ while IFS= read -r rel; do
   # agent frontmatter derive from the same live state and stay consistent
   # by construction (see tests/lint.sh's roles.conf <-> frontmatter check).
   cp "$src" "$dest"
+  # settings.json carries a machine-local top-level "model" pin that the repo
+  # deliberately does not ship (see install.sh's model-pin preservation block)
+  # — strip it so a capture doesn't republish it.
+  if [[ "$rel" == *settings.json ]]; then
+    python3 - "$dest" <<'PY'
+import json, sys
+path = sys.argv[1]
+with open(path) as f:
+    data = json.load(f)
+if isinstance(data, dict) and "model" in data:
+    del data["model"]
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+PY
+  fi
 done < "$REPO/MANIFEST"
 
 echo "Captured. Review with:  git -C $REPO status"

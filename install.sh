@@ -87,6 +87,7 @@ done < "$REPO/MANIFEST"
 chmod +x "$HOME/.claude/local-mode/claude-local" \
          "$HOME/.claude/local-mode/sync-local.sh" \
          "$HOME/.claude/local-mode/bootstrap-reverse.sh" \
+         "$HOME/.claude/local-mode/roles-lib.sh" \
          "$HOME/.claude/hooks/dispatch-directive.py" \
          "$HOME/.claude/hooks/post-edit-lint.py" \
          "$HOME/.claude/hooks/commit-guard.py" \
@@ -103,7 +104,9 @@ if command -v claude >/dev/null; then
   SRV="$HOME/.claude/mcp-servers/ollama-delegate/server.py"
   command -v cygpath >/dev/null && SRV="$(cygpath -w "$SRV")"
   claude mcp remove -s user ollama-delegate >/dev/null 2>&1 || true
-  claude mcp add -s user ollama-delegate -- "$PYBIN" "$SRV"
+  # Fail-soft: a registration failure here must not abort install.
+  claude mcp add -s user ollama-delegate -- "$PYBIN" "$SRV" \
+    || echo "  WARNING: MCP registration failed — run manually later: claude mcp add -s user ollama-delegate -- $PYBIN $SRV"
   # Also register in the claude-local config dir so `claude --local` sessions
   # (CLAUDE_CONFIG_DIR=~/.claude-local) get the server too. That dir may never
   # have been initialized, so guard both calls — a failure here must not
@@ -134,26 +137,17 @@ fi
 
 ROLES_LIVE="$HOME/.claude/local-mode/roles.conf"
 
+# shellcheck source=home/claude/local-mode/roles-lib.sh
+source "$REPO/home/claude/local-mode/roles-lib.sh"
+
 # Print "role model" pairs for the Ollama-backed roles (claude.* excluded).
-list_role_models() {
-  awk -F= '!/^[[:space:]]*#/ && NF>=2 && $1 !~ /claude\./ {
-    role=$1; gsub(/[[:space:]]/,"",role);
-    val=$2; sub(/#.*/,"",val); gsub(/[[:space:]]/,"",val);
-    if (val != "") print role, val
-  }' "$ROLES_LIVE"
-}
+list_role_models() { roles_conf_list_models "$ROLES_LIVE"; }
 
 # set_role_model <role> <model> — rewrite one assignment, keeping its comment.
-set_role_model() {
-  local role_re
-  role_re="$(printf '%s' "$1" | sed 's/\./\\./g')"
-  awk -v re="^[[:space:]]*${role_re}[[:space:]]*=" -v m="$2" \
-    '$0 ~ re { sub(/=[[:space:]]*[^#[:space:]]+/, "= " m) } { print }' \
-    "$ROLES_LIVE" > "$ROLES_LIVE.tmp" && mv "$ROLES_LIVE.tmp" "$ROLES_LIVE"
-}
+set_role_model() { roles_conf_set "$ROLES_LIVE" "$1" "$2"; }
 
 pull_role_models() {
-  list_role_models | awk '{print $2}' | sort -u | while read -r m; do
+  roles_conf_unique_models "$ROLES_LIVE" | while read -r m; do
     ollama pull "$m" || echo "  WARNING: pull failed for $m — pull manually and re-run sync-local.sh"
   done
 }

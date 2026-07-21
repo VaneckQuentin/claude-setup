@@ -13,6 +13,13 @@ while IFS= read -r f; do
   bash -n "$f" || { echo "FAIL: $f"; fail=1; }
 done < <(git ls-files '*.sh'; echo home/claude/local-mode/claude-local)
 
+echo "== shell syntax (zsh -n)"
+if command -v zsh >/dev/null; then
+  zsh -n shell/claude-wrapper.zsh || { echo "FAIL: shell/claude-wrapper.zsh"; fail=1; }
+else
+  echo "WARNING: zsh not found, skipping shell/claude-wrapper.zsh syntax check." >&2
+fi
+
 echo "== python syntax (ast.parse)"
 while IFS= read -r f; do
   python3 - "$f" <<'PY' || fail=1
@@ -45,18 +52,12 @@ done < <(git ls-files 'home/*')
 
 echo "== roles.conf ↔ agent frontmatter"
 CONF="home/claude/local-mode/roles.conf"
+# shellcheck source=home/claude/local-mode/roles-lib.sh
+source "home/claude/local-mode/roles-lib.sh"
 
 # echo the model roles.conf assigns to <role> (dotted roles like
 # claude.explorer / tier.code are escaped for the awk regex).
-model_for_role() {
-  local role_re
-  role_re="$(printf '%s' "$1" | sed 's/\./\\./g')"
-  awk -v re="^[[:space:]]*${role_re}[[:space:]]*=" '
-    $0 ~ re {
-      val=$0; sub(/^[^=]*=/, "", val); sub(/#.*/, "", val);
-      gsub(/^[ \t]+|[ \t]+$/, "", val); print val; exit
-    }' "$CONF"
-}
+model_for_role() { roles_conf_get "$CONF" "$1"; }
 
 # echo the `model:` value from an agent frontmatter file
 agent_model() { grep -m1 '^model:' "$1" | sed -E 's/^model:[[:space:]]*//'; }
@@ -83,6 +84,12 @@ check_agent_model home/claude/agents/reviewer.md         claude.reviewer
 check_agent_model home/claude/agents/reverse-engineer.md claude.reverse-engineer
 check_agent_model home/claude/agents/browser-headless.md claude.browser-headless
 check_agent_model home/claude/agents/browser-headed.md   claude.browser-headed
+
+echo "== commit-guard behavior (tests/test-commit-guard.sh)"
+bash tests/test-commit-guard.sh || { echo "FAIL: tests/test-commit-guard.sh"; fail=1; }
+
+echo "== ollama-delegate path confinement (tests/test-server-paths.py)"
+python3 tests/test-server-paths.py || { echo "FAIL: tests/test-server-paths.py"; fail=1; }
 
 [[ "$fail" == 0 ]] && echo "OK — all checks passed."
 exit "$fail"

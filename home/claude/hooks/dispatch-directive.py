@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
 UserPromptSubmit hook — inject a dispatch protocol next to every non-trivial
-prompt, so the ORCHESTRATOR (Opus) reliably decomposes and delegates instead of
-doing everything itself. Opus makes the routing decision (high quality); this
-hook only guarantees it considers routing on every request.
+prompt, so the ORCHESTRATOR (whatever model the session is configured with)
+reliably decomposes and delegates instead of doing everything itself. The
+orchestrator makes the routing decision (high quality); this hook only
+guarantees it considers routing on every request.
 
 Fail-open and near-zero cost: static text, no network, no local model.
 Kill switch: set env CLAUDE_AUTODISPATCH=0 to disable.

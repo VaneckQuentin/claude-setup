@@ -42,23 +42,16 @@ python3 -c "import r2pipe" 2>/dev/null && ok "r2pipe present" || { pip3 install 
 step "ollama models"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 CONF="$DIR/roles.conf"
-
-# Unique Ollama tags referenced by roles.conf (plain + tier.* roles — same
-# parsing as install.sh's list_role_models; claude.* excluded, those are
-# Anthropic aliases, not Ollama tags). Keep this in sync with install.sh.
-list_role_models() {
-  awk -F= '!/^[[:space:]]*#/ && NF>=2 && $1 !~ /claude\./ {
-    role=$1; gsub(/[[:space:]]/,"",role);
-    val=$2; sub(/#.*/,"",val); gsub(/[[:space:]]/,"",val);
-    if (val != "") print role, val
-  }' "$CONF"
-}
+# shellcheck source=roles-lib.sh
+source "$DIR/roles-lib.sh"
 
 if curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
   present(){ curl -sf http://localhost:11434/api/tags | python3 -c "import sys,json;print('\n'.join(m['name'] for m in json.load(sys.stdin).get('models',[])))"; }
   AVAIL="$(present)"
   if [ -f "$CONF" ]; then
-    MODELS="$(list_role_models | awk '{print $2}' | sort -u)"
+    # Unique Ollama tags referenced by roles.conf (plain + tier.* roles;
+    # claude.* excluded, those are Anthropic aliases, not Ollama tags).
+    MODELS="$(roles_conf_unique_models "$CONF")"
     # dolphin-mixtral is the uncensored `ollama_run` pass for reverse-engineer
     # (see the reverse-role comment in roles.conf) — not a role= value itself.
     if grep -q "dolphin-mixtral" "$CONF"; then

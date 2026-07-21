@@ -9,11 +9,13 @@ personal data live here — install it, log in, and it works.
 | Piece | Files |
 |---|---|
 | Global rules (dispatch, language, pipelines) | `home/claude/CLAUDE.md` |
-| Settings: model, effort, hooks, statusline, LSP plugins | `home/claude/settings.json` |
-| Statusline (model, branch, cost, context %) | `home/claude/hooks/statusline.py` |
+| Settings: effort, hooks, statusline, LSP plugins (machine-local model pin preserved, not shipped) | `home/claude/settings.json` |
+| Statusline (model, branch, plan usage %, context %) | `home/claude/hooks/statusline.py` |
 | Dispatch hook (bulk-intent gate, FR+EN) | `home/claude/hooks/dispatch-directive.py` |
+| Commit guard (blocks commits leaking secrets/personal data) | `home/claude/hooks/commit-guard.py` |
 | Post-edit lint hook (token-free syntax checks) | `home/claude/hooks/post-edit-lint.py` |
 | Hybrid subagents (haiku/sonnet/opus tiers) | `home/claude/agents/*.md` |
+| `/model-preset` command (show/switch the subagent model preset) | `home/claude/commands/model-preset.md` |
 | ollama-delegate MCP server | `home/claude/mcp-servers/ollama-delegate/server.py` |
 | Full-local mode + model mapping (single source: `roles.conf`) | `home/claude/local-mode/*` |
 | Full-local config dir (own CLAUDE.md, agents) | `home/claude-local/*` |
@@ -58,6 +60,17 @@ per-project Serena registrations (see below), the Ollama model weights.
    claude mcp add -s local serena -- uvx --from "git+https://github.com/oraios/serena" serena start-mcp-server
    ```
 
+5. Optional, only for the `reverse-engineer` subagent (binary analysis via a
+   radare2 MCP bridge): once per machine (macOS/Homebrew),
+
+   ```sh
+   ~/.claude/local-mode/bootstrap-reverse.sh
+   ```
+
+   Core installs radare2 + r2ghidra + r2mcp + r2pipe; add `--decompiler` for
+   the LLM4Decompile model (~13 GB) or `--full` for frida/yara/binwalk/angr/
+   unicorn too. Idempotent, safe to re-run.
+
 ## Keeping machines in sync
 
 Edits happen in `~/.claude` (live), not in the repo. To publish them:
@@ -68,7 +81,17 @@ git add -A && git commit && git push
 ```
 
 On other machines: `git pull && ./install.sh` (it backs up any diverging
-CLAUDE.md/settings.json to `*.bak.<timestamp>` first).
+CLAUDE.md/settings.json to `*.bak.<timestamp>` first). The repo's
+`settings.json` never carries a model pin — `capture.sh` strips any local
+`model` key before it lands in the repo, and `install.sh` restores your
+machine's own pin from the backup on upgrade, so the choice stays
+per-machine.
+
+Before committing, run `bash tests/lint.sh` — it checks shell/Python/JSON
+syntax, MANIFEST consistency, roles.conf-vs-agent-frontmatter drift, and the
+behavioral suites `tests/test-commit-guard.sh` and
+`tests/test-server-paths.py`. CI runs the same script plus `shellcheck` on
+every push/PR.
 
 ## Windows
 
@@ -97,7 +120,8 @@ Everything is driven by `home/claude/local-mode/roles.conf` (full-local roles,
 `ollama_run` tiers, hybrid subagent Claude models). Edit it, run
 `~/.claude/local-mode/sync-local.sh`, then `./capture.sh` + commit.
 Claude-plan presets: `sync-local.sh --plan eco|balanced|best` (old names
-`pro`/`max100`/`max200` still work).
+`pro`/`max100`/`max200` still work), or interactively from inside a session
+with `/model-preset [eco|balanced|best]`.
 
 Full-local note: the Ollama *server* context length must be ≥64K for
 `claude --local` (Ollama app → Settings → Context length, or

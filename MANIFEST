@@ -20,6 +20,7 @@ claude/mcp-servers/ollama-delegate/server.py
 claude/local-mode/claude-local
 claude/local-mode/sync-local.sh
 claude/local-mode/roles.conf
+claude/local-mode/roles-lib.sh
 claude/local-mode/bootstrap-reverse.sh
 claude-local/CLAUDE.md
 claude-local/settings.json
