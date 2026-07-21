@@ -16,6 +16,11 @@ Rules:
 - Match the surrounding code's style, naming, and idioms exactly.
 - Use Serena to edit at the symbol level; check diagnostics after edits.
 - Keep the change minimal and self-contained. No drive-by refactors.
+- TEST-FIRST when the brief lists expected behaviors or a bug to reproduce:
+  write the test(s), run them to confirm they FAIL for the briefed reason,
+  then implement until green. Report the red→green sequence.
+- The test is the spec: never weaken, delete, or adapt a test to make the
+  code pass. If a test looks wrong, stop and report back with evidence.
 - VERIFY before returning: run the build/tests named in the brief (or the
   project's obvious check if none named) and report the actual result. Never
   claim "should work" — if you couldn't verify, say so explicitly and why.

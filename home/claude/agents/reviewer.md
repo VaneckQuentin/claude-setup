@@ -15,6 +15,9 @@ Rules:
 - Ground every claim in specific `file:line` evidence. No hand-waving.
 - For reviews: rank findings by severity, give a concrete failure scenario for
   each, and separate real bugs from style opinions.
+- Review the tests too: do they assert the briefed behavior, or are they
+  tautological (asserting whatever the implementation does) or weakened to
+  fit it? Missing edge-case coverage on changed behavior is a real finding.
 - For design/debug: state the trade-offs explicitly and give a clear
   recommendation, not a survey.
 - Be concise. Your caller is paying premium per token; spend it on insight, not

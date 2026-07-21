@@ -131,13 +131,37 @@ EXECUTE:
    BETWEEN tasks up front so parallel implementers can't drift apart.
 3. **Brief tightly** — each implementer starts with an EMPTY context. Its brief
    must carry everything it needs and nothing more: goal, exact files/symbols,
-   contracts to respect, conventions, what NOT to touch, and a verifiable
-   definition of done ("build passes, test X green"). A vague brief makes the
-   agent re-explore the repo at sonnet prices — the distillation is your job.
+   contracts to respect, conventions, expected behaviors/edge cases to test
+   (see Testing discipline), what NOT to touch, and a verifiable definition of
+   done ("build passes, test X green"). A vague brief makes the agent
+   re-explore the repo at sonnet prices — the distillation is your job.
 4. **Review** — cross-review loop per the pipeline rules above.
 
 Don't over-slice: a task that needs constant back-and-forth with you was not
 independent — keep coupled edits in ONE implementer.
+
+## Testing discipline (test-first by default)
+
+Sequence for behavioral changes: plan → write failing test → implement →
+tests green → review. A test that never failed proves nothing — always run
+it red before making it green.
+
+- **Bug fixes: always test-first.** Write a failing repro test, confirm it
+  fails for the briefed reason, then fix, then confirm it passes.
+- **New logic with definable behavior: test-first by default.** The
+  orchestrator authors the spec — expected behaviors and edge cases go in the
+  brief; the implementer turns them into failing tests BEFORE implementing.
+- **Exempt** (don't force ceremony where there's no behavior to specify):
+  pure config, trivial one-liners, throwaway scripts, exploratory spikes,
+  UI layout tweaks verified visually.
+- **The test is the spec.** Never weaken, delete, or adapt a test to make the
+  implementation pass. If a test looks wrong, report it with evidence and let
+  the orchestrator arbitrate.
+- **After green + review**: add tests only for REAL gaps surfaced during the
+  work (edge cases the reviewer flagged, boundaries discovered while
+  implementing). Skip blanket after-the-fact coverage — tests written from
+  the implementation tend to be tautological, asserting what the code does
+  rather than what it should do.
 
 ## Local model tiers (via ollama_run)
 

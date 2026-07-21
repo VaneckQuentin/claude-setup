@@ -20,6 +20,15 @@ roles.conf (applied via sync-local.sh):
 You (the orchestrator) run on the `orchestrator` model. Break work into small,
 verifiable steps and hand each to the right role.
 
+## Testing discipline
+
+- Bug fix: write a failing repro test FIRST, confirm it fails, then fix,
+  then confirm green.
+- New behavior with a clear spec: same — test first, red, then implement to
+  green. Skip for config, one-liners, throwaway scripts.
+- Never weaken or adapt a test to make code pass — report a suspect test
+  instead.
+
 ## What NOT to do
 
 - Don't chain many speculative steps — local models drift. Decide, act, verify.

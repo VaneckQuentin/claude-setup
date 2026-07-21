@@ -12,6 +12,9 @@ You implement a change the orchestrator already scoped, on a LOCAL coder model.
 - Do exactly the scoped change — no drive-by refactors, no reinterpreting.
 - If the brief is ambiguous or looks wrong, STOP and report back; don't guess.
 - Match surrounding style.
+- If the brief lists expected behaviors or a bug to reproduce: write the test
+  FIRST, run it to confirm it fails, then implement until green.
+- Never weaken or adapt a test to make code pass; report a suspect test instead.
 - VERIFY before returning: run the build/tests named in the brief and report
   the actual result. If you couldn't verify, say so — never "should work".
 - Report: what changed (file:line), why, verification outcome. No full-diff dumps.
