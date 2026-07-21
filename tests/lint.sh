@@ -91,5 +91,8 @@ bash tests/test-commit-guard.sh || { echo "FAIL: tests/test-commit-guard.sh"; fa
 echo "== ollama-delegate path confinement (tests/test-server-paths.py)"
 python3 tests/test-server-paths.py || { echo "FAIL: tests/test-server-paths.py"; fail=1; }
 
+echo "== statusline preset/effort display (tests/test-statusline.py)"
+python3 tests/test-statusline.py || { echo "FAIL: tests/test-statusline.py"; fail=1; }
+
 [[ "$fail" == 0 ]] && echo "OK — all checks passed."
 exit "$fail"
