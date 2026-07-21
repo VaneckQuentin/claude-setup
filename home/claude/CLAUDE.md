@@ -163,6 +163,23 @@ it red before making it green.
   the implementation tend to be tautological, asserting what the code does
   rather than what it should do.
 
+## Code quality bar
+
+- Readability first: code is written for the next reader. Self-explanatory
+  names (no abbreviations, no `data2`); functions do one thing — split by
+  responsibility, never to hit a line count.
+- Simplest design that works. No speculative abstraction, no interface with a
+  single implementation, no flexibility nobody asked for (YAGNI). Introduce a
+  design pattern only when the problem shape demands it (a third variant in a
+  switch, duplicated logic across call sites, a real need to swap
+  implementations) — the pattern must earn its complexity.
+- Performance: never optimize prematurely, but don't be gratuitously wasteful
+  either — obvious N+1 queries and quadratic passes over unbounded input are
+  bugs, not style. Beyond that, optimize only with a measurement.
+- Consistency with the codebase beats personal ideal: follow local
+  conventions even when you'd design differently; if a convention is
+  genuinely harmful, flag it rather than silently diverging.
+
 ## Local model tiers (via ollama_run)
 
 Semantic tiers: `code` (real code generation/analysis), `cheap` (summaries,

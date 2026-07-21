@@ -29,6 +29,13 @@ verifiable steps and hand each to the right role.
 - Never weaken or adapt a test to make code pass — report a suspect test
   instead.
 
+## Code quality bar
+
+- Readable, self-explanatory names; functions split by responsibility.
+- Simplest design that works — no speculative abstraction; a design pattern
+  only when the problem demands it.
+- Follow the codebase's existing conventions over personal preference.
+
 ## What NOT to do
 
 - Don't chain many speculative steps — local models drift. Decide, act, verify.
