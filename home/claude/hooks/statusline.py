@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 statusLine command — one dense line: model (+ reasoning effort) | branch (or
-dir) | subagent plan preset (agents:eco/balanced/best/custom) | plan usage
+dir) | subagent plan preset (preset:eco/balanced/best/custom) | plan usage
 (5h/7d %, falling back to $cost under API billing) | context %.
 
 Token discipline is this setup's core theme; the statusline makes it
@@ -106,7 +106,7 @@ def main():
 
     preset = plan_preset(os.path.expanduser("~/.claude/local-mode/roles.conf"))
     if preset:
-        parts.append(f"agents:{preset}")
+        parts.append(f"preset:{preset}")
 
     # Plan usage (subscription): 5-hour session window + weekly. Falls back to
     # the API-equivalent dollar figure when no rate limits exist (API billing).
