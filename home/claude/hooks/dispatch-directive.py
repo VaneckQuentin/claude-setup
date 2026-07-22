@@ -9,8 +9,10 @@ guarantees it considers routing on every request.
 Fail-open and near-zero cost: static text, no network, no local model.
 Kill switch: set env CLAUDE_AUTODISPATCH=0 to disable.
 
-NOTE: DIRECTIVE is a condensed copy of the dispatch rules in CLAUDE.md —
-if you change the rules there, mirror the change here (and vice versa).
+NOTE: each directive is a condensed copy of the dispatch rules in the
+matching CLAUDE.md (DIRECTIVE -> ~/.claude, LOCAL_DIRECTIVE ->
+~/.claude-local) — if you change the rules there, mirror the change here
+(and vice versa).
 """
 import json
 import os
@@ -26,6 +28,27 @@ Split this request into (a) EXPLORATION (finding/reading/searching code) and (b)
 4. bulk grunt text (summarize a long file/log, classify, draft) -> `ollama_run` tool (local, free) — pass inputs by path via `files`, never paste content
 
 Spawn independent subtasks in parallel; only conclusions return here. If the whole request is one trivial step, ignore this and just answer directly — do NOT over-decompose."""
+
+# Full-local sessions have opposite economics: tokens are free, the costs are
+# wall-clock (every subagent spawn re-prefills ~25K tokens of system prompt)
+# and the orchestrator's own context quality. Ollama also serves ONE request
+# per model at a time, so parallel fan-out serializes anyway.
+LOCAL_DIRECTIVE = """## Dispatch protocol — LOCAL mode (apply before acting)
+Tokens are free here; the real costs are wall-clock time and your own context quality. Route accordingly:
+
+1. EXPLORATION — delegate to the `explorer` subagent (fast recon model) when it is heavy: reading/searching 10+ files, or scanning large files/logs. Reason over its summary. Light lookups: read them yourself.
+2. code edits -> do them INLINE by default (with the default roles.conf the implementer runs the same model as you — a spawn buys no quality and costs a full prompt prefill). Spawn `implementer` only when the change needs heavy reading that would bloat your context.
+3. bulk grunt text (summarize a long file/log, classify, draft) -> `ollama_run` tool — pass inputs by path via `files`, never paste content.
+4. Run subtasks SEQUENTIALLY — Ollama serves one request per model at a time; parallel subagents serialize and just stack prefill overhead.
+
+If the whole request is one trivial step, ignore this and just answer directly — do NOT over-decompose."""
+
+
+def is_local_session():
+    """True when this session runs full-local (claude --local sets
+    CLAUDE_CONFIG_DIR=~/.claude-local; hooks inherit the session env)."""
+    conf_dir = os.environ.get("CLAUDE_CONFIG_DIR", "").rstrip("/")
+    return os.path.basename(conf_dir) == ".claude-local"
 
 
 def main():
@@ -86,7 +109,7 @@ def main():
     out = {
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
-            "additionalContext": DIRECTIVE,
+            "additionalContext": LOCAL_DIRECTIVE if is_local_session() else DIRECTIVE,
         }
     }
     sys.stdout.write(json.dumps(out))

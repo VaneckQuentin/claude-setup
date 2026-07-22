@@ -21,8 +21,11 @@ assume concrete model names from memory. Subagent Claude models follow the
 user's plan budget (`sync-local.sh --plan eco|balanced|best`; old names
 pro|max100|max200 still work).
 
-The dispatch rules below apply in BOTH modes. The `ollama-delegate` MCP is the
-universal "submodel per task" mechanism and works in either mode.
+The dispatch rules below are for HYBRID mode. Full-local mode has its own
+local-native rules in `~/.claude-local/CLAUDE.md` (tokens are free there —
+inline-first, sequential, delegate only for context protection or recon
+speed); don't port hybrid dispatch advice into it. The `ollama-delegate` MCP
+is the universal "submodel per task" mechanism and works in either mode.
 
 ## Dispatch rules (default reasoning before acting)
 

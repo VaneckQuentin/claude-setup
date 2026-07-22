@@ -14,8 +14,47 @@ set -euo pipefail
 OLLAMA_HOST="http://localhost:11434"
 ENVFILE="$HOME/.claude/local-mode/models.env"
 
+# Server-side tuning we can only detect and warn about, not fix from here
+# (both are settable in the Ollama app UI, which launchctl cannot see).
+server_tuning_warnings() {
+  # Context length: a Claude Code session needs a BIG window (the system
+  # prompt alone is ~20K tokens); Ollama's default is far smaller and
+  # silently truncates.
+  local ctx="${OLLAMA_CONTEXT_LENGTH:-}"
+  [[ -z "$ctx" ]] && command -v launchctl >/dev/null 2>&1 && ctx="$(launchctl getenv OLLAMA_CONTEXT_LENGTH 2>/dev/null || true)"
+  if ! [[ "$ctx" =~ ^[0-9]+$ && "$ctx" -ge 65536 ]]; then
+    echo "WARNING: Ollama server context length looks small or unset (${ctx:-default})." >&2
+    echo "  Full-local mode needs >=64K or the session truncates its own instructions." >&2
+    echo "  Fix: Ollama app -> Settings -> Context length, or restart the server with" >&2
+    echo "    OLLAMA_CONTEXT_LENGTH=131072 ollama serve" >&2
+    echo "  (If you already set it in the app UI, ignore this — it isn't detectable here.)" >&2
+  fi
+
+  # Keep-alive: the default 5m unloads the ~20GB orchestrator between turns —
+  # every resume then pays a full model reload + prompt re-prefill.
+  local ka="${OLLAMA_KEEP_ALIVE:-}"
+  [[ -z "$ka" ]] && command -v launchctl >/dev/null 2>&1 && ka="$(launchctl getenv OLLAMA_KEEP_ALIVE 2>/dev/null || true)"
+  if ! keep_alive_is_long "$ka"; then
+    echo "WARNING: OLLAMA_KEEP_ALIVE looks short or unset (${ka:-default 5m})." >&2
+    echo "  Idle >5min unloads the orchestrator model; the next turn pays a full" >&2
+    echo "  reload + re-prefill. Set it to 1h (or -1 = never unload):" >&2
+    echo "    launchctl setenv OLLAMA_KEEP_ALIVE 1h   (then restart the Ollama app)" >&2
+    echo "  (If you already set it in the app UI, ignore this — it isn't detectable here.)" >&2
+  fi
+}
+
+keep_alive_is_long() { # true if the value keeps models resident >= 30 min
+  local v="$1"
+  [[ "$v" =~ ^-[0-9] ]] && return 0  # any negative duration = never unload
+  [[ "$v" =~ ^([0-9]+)h([0-9]+m?)?$ ]] && [[ "${BASH_REMATCH[1]}" -ge 1 ]] && return 0
+  [[ "$v" =~ ^([0-9]+)m$ ]] && [[ "${BASH_REMATCH[1]}" -ge 30 ]] && return 0
+  [[ "$v" =~ ^[0-9]+s?$ ]] && [[ "${v%s}" -ge 1800 ]] && return 0
+  return 1
+}
+
 if [[ "${1:-}" == "--status" ]]; then
   if curl -sf "$OLLAMA_HOST/api/tags" >/dev/null 2>&1; then echo "Ollama: UP on $OLLAMA_HOST"; else echo "Ollama: down"; fi
+  server_tuning_warnings
   exit 0
 fi
 
@@ -32,19 +71,8 @@ if ! curl -sf "$OLLAMA_HOST/api/tags" >/dev/null 2>&1; then
   exit 1
 fi
 
-# 2. Context-length sanity: a Claude Code session needs a BIG window (the
-# system prompt alone is ~20K tokens); Ollama's default is far smaller and
-# silently truncates. The limit is server-side (OLLAMA_CONTEXT_LENGTH), so we
-# can only detect and warn, not fix it from here.
-CTX="${OLLAMA_CONTEXT_LENGTH:-}"
-[[ -z "$CTX" ]] && command -v launchctl >/dev/null 2>&1 && CTX="$(launchctl getenv OLLAMA_CONTEXT_LENGTH 2>/dev/null || true)"
-if ! [[ "$CTX" =~ ^[0-9]+$ && "$CTX" -ge 65536 ]]; then
-  echo "WARNING: Ollama server context length looks small or unset (${CTX:-default})." >&2
-  echo "  Full-local mode needs >=64K or the session truncates its own instructions." >&2
-  echo "  Fix: Ollama app -> Settings -> Context length, or restart the server with" >&2
-  echo "    OLLAMA_CONTEXT_LENGTH=131072 ollama serve" >&2
-  echo "  (If you already set it in the app UI, ignore this — it isn't detectable here.)" >&2
-fi
+# 2. Server tuning sanity (context length, keep-alive) — warn only.
+server_tuning_warnings
 
 # 3. Ensure roles have been synced.
 if [[ ! -f "$ENVFILE" ]]; then

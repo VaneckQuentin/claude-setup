@@ -1,24 +1,43 @@
 # FULL-LOCAL mode — operating rules
 
 You are running entirely on LOCAL Ollama models (native Anthropic endpoint, no
-proxy). There is no paid API here — optimize for reliability and speed, not token
-cost. Local models are weaker at long agentic chains, so keep every task tight
-and single-purpose.
+proxy). There is no paid API here: tokens are FREE. The scarce resources are
+wall-clock time, your own context QUALITY (local models degrade on long
+context well before the window is full), and review independence. Optimize
+for those — the hybrid-mode token-saving reflexes do not apply.
 
-## Dispatch by role (subagents)
+## Dispatch (local calculus)
 
-Delegate to the subagent whose role fits; each is bound to an Ollama model by
-roles.conf (applied via sync-local.sh):
+A subagent spawn re-prefills its ~25K-token system prompt at local speeds —
+real seconds of overhead before any work starts. Delegate only when it buys
+one of the two things that matter here: **context protection** (the work
+would drag volumes of file/log content into your context) or **speed** (the
+recon model is much faster than you).
 
-- **explorer** (`explore` role) — read-only recon, "where/how is X".
-- **implementer** (`code` role) — one scoped code change at a time.
-- **reviewer** (`orchestrator` role) — architecture / bug / diff reasoning.
-- **reverse-engineer** (`reverse` role) — binary/protocol/obfuscated analysis.
-- **`ollama_run` tool** — one-shot grunt work (summarize, classify, draft),
-  `model:"cheap"` for text or `model:"code"` for code-ish.
+- **Edit inline by default.** With the default roles.conf the `implementer`
+  runs the same model as you (`code` = `orchestrator`) — a spawn buys no
+  quality and costs a prefill. Spawn it only when the change needs heavy
+  reading you don't want polluting your context, or if you've assigned
+  `code` a stronger model than yours.
+- **Sequential, never parallel.** Ollama serves ONE request per model at a
+  time — "parallel" subagents serialize and just stack prefill overhead. Run
+  subtasks one after another.
+- **Use `explorer` liberally** (`explore` role, fast recon model) for heavy
+  "where/how is X" sweeps and large-file scans — the one genuinely faster
+  tier. Light lookups (a few small files): read them yourself.
+- **`ollama_run` tool** for one-shot grunt work (summarize, classify, draft):
+  `model:"cheap"` for text, `model:"code"` for code-ish; pass inputs by path
+  via `files`.
+- **reverse-engineer** (`reverse` role) for binary/protocol/obfuscated
+  analysis — needs a tool-capable model to drive radare2.
 
-You (the orchestrator) run on the `orchestrator` model. Break work into small,
-verifiable steps and hand each to the right role.
+## Review (know its limits here)
+
+With the default roles.conf the local `reviewer` runs the same model as the
+implementer — same blind spots, correlated misses. Treat local review as a
+smoke check: a fresh context catches slips, not subtle bugs. For any diff that matters, escalate:
+review it in HYBRID mode (`claude`) — a diff review costs almost nothing in
+API tokens and is the best hybrid/local synergy available.
 
 ## Testing discipline
 
@@ -39,9 +58,12 @@ verifiable steps and hand each to the right role.
 ## What NOT to do
 
 - Don't chain many speculative steps — local models drift. Decide, act, verify.
-- Don't fan out subagents for tightly-coupled work.
-- If a subagent returns something incoherent, retry with a tighter brief or do
-  it yourself rather than compounding the error.
+- Don't fan out parallel subagents — see Dispatch: it buys nothing here.
+- If a subagent returns something incoherent, retry ONCE with a tighter brief
+  or do it yourself rather than compounding the error.
 
 To change which model a role uses: edit `~/.claude/local-mode/roles.conf`, run
-`sync-local.sh`, then relaunch `claude --local`.
+`sync-local.sh`, then relaunch `claude --local`. Keep the Ollama server tuned:
+context length >= 64K and `OLLAMA_KEEP_ALIVE` >= 30 min (1h or -1
+recommended; the default 5m unloads the orchestrator between turns) —
+`claude-local --status` checks both.

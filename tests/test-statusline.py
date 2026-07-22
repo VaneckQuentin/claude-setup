@@ -129,6 +129,35 @@ r = subprocess.run(
 check("e2e: no effort field -> bare model name",
       r.stdout.strip().startswith("Fable 5 |"), True)
 
+# --- preset field: hybrid vs local session --------------------------------
+# The preset maps HYBRID subagent models; in a full-local session
+# (CLAUDE_CONFIG_DIR=~/.claude-local) it is meaningless and must be hidden.
+# A sandboxed HOME makes the roles.conf deterministic for both cases.
+home = tempfile.mkdtemp(prefix="statusline-preset.")
+local_mode = os.path.join(home, ".claude", "local-mode")
+os.makedirs(local_mode)
+with open(os.path.join(local_mode, "roles.conf"), "w") as fh:
+    for role, model in PRESETS["eco"].items():
+        fh.write(f"claude.{role} = {model}\n")
+
+
+def render(extra_env):
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDE_CONFIG_DIR"}
+    env["HOME"] = home
+    env.update(extra_env)
+    r = subprocess.run(
+        [sys.executable, os.path.join(REPO, "home", "claude", "hooks", "statusline.py")],
+        input=json.dumps(payload), capture_output=True, text=True, env=env)
+    return r.stdout.strip()
+
+
+check("e2e: hybrid session shows preset field",
+      "preset:eco" in render({}), True)
+check("e2e: local session hides preset field",
+      "preset:" in render({"CLAUDE_CONFIG_DIR": os.path.join(home, ".claude-local")}),
+      False)
+shutil.rmtree(home, ignore_errors=True)
+
 print()
 if failures:
     print(f"statusline tests FAILED ({len(failures)}).")

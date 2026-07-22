@@ -94,5 +94,11 @@ python3 tests/test-server-paths.py || { echo "FAIL: tests/test-server-paths.py";
 echo "== statusline preset/effort display (tests/test-statusline.py)"
 python3 tests/test-statusline.py || { echo "FAIL: tests/test-statusline.py"; fail=1; }
 
+echo "== dispatch directive hybrid/local (tests/test-dispatch-directive.py)"
+python3 tests/test-dispatch-directive.py || { echo "FAIL: tests/test-dispatch-directive.py"; fail=1; }
+
+echo "== launcher keep-alive check (tests/test-keep-alive.sh)"
+bash tests/test-keep-alive.sh || { echo "FAIL: tests/test-keep-alive.sh"; fail=1; }
+
 [[ "$fail" == 0 ]] && echo "OK — all checks passed."
 exit "$fail"

@@ -104,9 +104,13 @@ def main():
     branch = git_branch(cwd)
     parts.append(branch if branch else os.path.basename(cwd))
 
-    preset = plan_preset(os.path.expanduser("~/.claude/local-mode/roles.conf"))
-    if preset:
-        parts.append(f"preset:{preset}")
+    # The preset names HYBRID subagent models — meaningless in a full-local
+    # session (claude --local sets CLAUDE_CONFIG_DIR=~/.claude-local).
+    conf_dir = os.environ.get("CLAUDE_CONFIG_DIR", "").rstrip("/")
+    if os.path.basename(conf_dir) != ".claude-local":
+        preset = plan_preset(os.path.expanduser("~/.claude/local-mode/roles.conf"))
+        if preset:
+            parts.append(f"preset:{preset}")
 
     # Plan usage (subscription): 5-hour session window + weekly. Falls back to
     # the API-equivalent dollar figure when no rate limits exist (API billing).
