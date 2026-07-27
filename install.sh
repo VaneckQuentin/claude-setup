@@ -245,4 +245,7 @@ cat <<'EOF'
        claude mcp add -s local serena -- uvx --from "git+https://github.com/oraios/serena" serena start-mcp-server
   3. Models not pulled? Re-run with --with-models, or `ollama pull` per roles.conf.
   4. Open a new shell (or `source ~/.zshrc`) for the `claude --local` wrapper.
+  5. Windows + PowerShell? Also run once, FROM THE POWERSHELL YOU ACTUALLY USE
+     (pwsh 7 and powershell 5.1 have separate profiles):
+       pwsh -ExecutionPolicy Bypass -File shell\install-wrapper.ps1
 EOF

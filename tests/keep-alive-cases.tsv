@@ -1,0 +1,21 @@
+# Shared test vectors for the keep-alive duration check — consumed by BOTH
+# tests/test-keep-alive.sh (bash launcher) and tests/test-claude-local-ps.ps1
+# (PowerShell launcher) so the two implementations cannot drift.
+# Format: <value><TAB><long|short>   ("(empty)" = empty value — a literal
+# leading tab would be stripped by bash's IFS read)
+-1	long
+-1s	long
+1h	long
+24h	long
+1h30m	long
+30m	long
+1800	long
+3600s	long
+0h	short
+0m	short
+0	short
+29m	short
+1799	short
+5m	short
+(empty)	short
+abc	short

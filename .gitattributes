@@ -1,0 +1,13 @@
+# LF everywhere for files parsed by bash/python/tab-split readers — a CRLF
+# checkout (Git for Windows autocrlf default) breaks shebang scripts under
+# Git Bash and leaves \r in the shared test vectors.
+*.sh   text eol=lf
+*.zsh  text eol=lf
+*.py   text eol=lf
+*.tsv  text eol=lf
+*.md   text eol=lf
+*.json text eol=lf
+*.conf text eol=lf
+home/claude/local-mode/claude-local text eol=lf
+# PowerShell is happy with either; keep the repo canonical as LF.
+*.ps1  text eol=lf

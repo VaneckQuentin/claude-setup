@@ -18,6 +18,7 @@ claude/agents/browser-headed.md
 claude/commands/model-preset.md
 claude/mcp-servers/ollama-delegate/server.py
 claude/local-mode/claude-local
+claude/local-mode/claude-local.ps1
 claude/local-mode/sync-local.sh
 claude/local-mode/roles.conf
 claude/local-mode/roles-lib.sh

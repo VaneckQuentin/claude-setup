@@ -100,5 +100,15 @@ python3 tests/test-dispatch-directive.py || { echo "FAIL: tests/test-dispatch-di
 echo "== launcher keep-alive check (tests/test-keep-alive.sh)"
 bash tests/test-keep-alive.sh || { echo "FAIL: tests/test-keep-alive.sh"; fail=1; }
 
+echo "== powershell launcher (tests/test-claude-local-ps.ps1)"
+# CI (ubuntu) ships pwsh; locally, point PWSH at a portable binary if needed.
+PWSH_BIN="${PWSH:-pwsh}"
+if command -v "$PWSH_BIN" >/dev/null; then
+  "$PWSH_BIN" -NoProfile -File tests/test-claude-local-ps.ps1 \
+    || { echo "FAIL: tests/test-claude-local-ps.ps1"; fail=1; }
+else
+  echo "WARNING: pwsh not found, skipping PowerShell launcher tests." >&2
+fi
+
 [[ "$fail" == 0 ]] && echo "OK — all checks passed."
 exit "$fail"

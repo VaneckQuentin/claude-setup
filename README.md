@@ -103,9 +103,15 @@ by cmd: Claude Code runs shell-form hooks through **Git Bash** when installed
   install Git for Windows and Python, clone this repo, run `./install.sh`
   **from Git Bash**. Hook commands and MCP registration auto-detect
   `python3` vs `python` and convert paths (`cygpath`). Ollama runs natively
-  on Windows, so `localhost:11434` needs no adaptation. Full-local mode
-  (`claude --local`, `sync-local.sh`) stays bash-only — run those from
-  Git Bash too, or ask for a .cmd port if you really live in cmd.
+  on Windows, so `localhost:11434` needs no adaptation. For `claude --local`
+  in **PowerShell**, run once — from the PowerShell you actually use daily
+  (`pwsh` 7 and `powershell` 5.1 have SEPARATE profiles):
+  `pwsh -ExecutionPolicy Bypass -File shell\install-wrapper.ps1` (or
+  `powershell -ExecutionPolicy ...` if that's your shell) —
+  it adds a wrapper to your $PROFILE that launches the native PowerShell
+  launcher (`claude-local.ps1`), which even reads OLLAMA_* tuning from the
+  real Windows env scopes (the bash launcher can't). `sync-local.sh` stays
+  bash — run it from Git Bash when you change roles.conf.
 - **WSL2** — everything works exactly as on macOS/Linux; Ollama can run on
   the Windows side (GPU) with `localhost:11434` reachable via WSL2 mirrored
   networking (Windows 11), else point `OLLAMA_HOST`/`OLLAMA_URL` at the
