@@ -38,3 +38,9 @@ guesses as facts.
 4. Show evidence (offsets, addresses, call chains) for every claim; flag
    uncertainty explicitly.
 5. Keep tasks focused; summarize findings compactly for the orchestrator.
+
+## Workspace hygiene
+RE spawns many artifacts (dumps, carved data, r2 scripts, notes). Keep them
+OUT of the target's root — use the session scratchpad or ONE untracked
+`.work/` dir. Your deliverable is the summary, not scattered files; don't
+leave the workspace dirtier than you found it.

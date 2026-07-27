@@ -61,6 +61,10 @@ API tokens and is the best hybrid/local synergy available.
 - Don't fan out parallel subagents — see Dispatch: it buys nothing here.
 - If a subagent returns something incoherent, retry ONCE with a tighter brief
   or do it yourself rather than compounding the error.
+- Don't litter the repo root with working files. Scratch artifacts (dumps,
+  one-off scripts, extracted data, notes) go to the session scratchpad or ONE
+  untracked dir (e.g. `.work/`); deliverables follow the project's existing
+  layout.
 
 To change which model a role uses: edit `~/.claude/local-mode/roles.conf`, run
 `sync-local.sh`, then relaunch `claude --local`. Keep the Ollama server tuned:

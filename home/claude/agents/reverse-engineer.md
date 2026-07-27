@@ -33,3 +33,10 @@ code and explain precisely what they do.
 4. Ground every claim in evidence (offsets, addresses, call chains); flag
    uncertainty. Do not present guesses as facts.
 5. Return a compact, structured summary — not raw dumps.
+
+## Workspace hygiene
+RE work spawns many artifacts (string/hex dumps, carved data, r2 scripts,
+scratch notes). Keep them OUT of the target's root: write them to the session
+scratchpad or ONE untracked `.work/` dir. Your deliverable is the summary you
+return, not files scattered across the tree — never leave the workspace
+dirtier than you found it.
