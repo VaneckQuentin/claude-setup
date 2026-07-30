@@ -7,6 +7,7 @@ claude/settings.json
 claude/hooks/run-hook.sh
 claude/hooks/dispatch-directive.py
 claude/hooks/post-edit-lint.py
+claude/hooks/keep-awake.py
 claude/hooks/commit-guard.py
 claude/hooks/statusline.py
 claude/agents/explorer.md

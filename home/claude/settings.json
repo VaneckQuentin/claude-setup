@@ -14,6 +14,33 @@
             "command": "sh \"$HOME/.claude/hooks/run-hook.sh\" \"$HOME/.claude/hooks/dispatch-directive.py\"",
             "timeout": 10,
             "statusMessage": "Routing…"
+          },
+          {
+            "type": "command",
+            "command": "sh \"$HOME/.claude/hooks/run-hook.sh\" \"$HOME/.claude/hooks/keep-awake.py\" start",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$HOME/.claude/hooks/run-hook.sh\" \"$HOME/.claude/hooks/keep-awake.py\" stop",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$HOME/.claude/hooks/run-hook.sh\" \"$HOME/.claude/hooks/keep-awake.py\" stop",
+            "timeout": 10
           }
         ]
       }

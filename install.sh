@@ -90,6 +90,7 @@ chmod +x "$HOME/.claude/local-mode/claude-local" \
          "$HOME/.claude/local-mode/roles-lib.sh" \
          "$HOME/.claude/hooks/dispatch-directive.py" \
          "$HOME/.claude/hooks/post-edit-lint.py" \
+         "$HOME/.claude/hooks/keep-awake.py" \
          "$HOME/.claude/hooks/commit-guard.py" \
          "$HOME/.claude/hooks/statusline.py" \
          "$HOME/.claude/hooks/run-hook.sh" 2>/dev/null || true
