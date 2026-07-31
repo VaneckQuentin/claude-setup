@@ -31,7 +31,12 @@ map_dest() {
 }
 
 echo "== Prerequisites"
-command -v python3 >/dev/null || { echo "ERROR: python3 is required." >&2; exit 1; }
+# Probe for a WORKING interpreter, not just a name on PATH: Windows installs
+# python as python/py (no python3), and the Microsoft Store app-execution
+# aliases add fake python3/python stubs that exist but fail when run.
+PYBIN=""
+for c in python3 python py; do "$c" -c "" >/dev/null 2>&1 && { PYBIN="$c"; break; }; done
+[[ -n "$PYBIN" ]] || { echo "ERROR: no working python found (tried python3, python, py)." >&2; exit 1; }
 command -v claude  >/dev/null || echo "WARNING: 'claude' CLI not found — install Claude Code first; MCP registration will be skipped."
 command -v ollama  >/dev/null || {
   echo "WARNING: ollama not found — local delegation (ollama_run) and 'claude --local' need it."
@@ -63,7 +68,7 @@ while IFS= read -r rel; do
   # Preserve a machine-local top-level "model" pin across settings.json
   # upgrades (the repo file doesn't ship one). Fail-soft: never abort install.
   if [[ -n "$BACKUP" && "$rel" == *settings.json ]]; then
-    python3 - "$BACKUP" "$dest" <<'PY' || true
+    "$PYBIN" - "$BACKUP" "$dest" <<'PY' || true
 import json, sys
 try:
     bak_path, dest_path = sys.argv[1], sys.argv[2]
@@ -97,11 +102,6 @@ chmod +x "$HOME/.claude/local-mode/claude-local" \
 
 echo "== Registering ollama-delegate MCP (user scope)"
 if command -v claude >/dev/null; then
-  # Probe for a WORKING interpreter: on Windows, Store app-execution aliases
-  # put fake python3/python stubs on PATH that exist but fail when run.
-  PYBIN=""
-  for c in python3 python py; do "$c" -c "" >/dev/null 2>&1 && { PYBIN="$c"; break; }; done
-  [[ -n "$PYBIN" ]] || { echo "WARNING: no working python — register the MCP manually later." >&2; PYBIN="python3"; }
   SRV="$HOME/.claude/mcp-servers/ollama-delegate/server.py"
   command -v cygpath >/dev/null && SRV="$(cygpath -w "$SRV")"
   claude mcp remove -s user ollama-delegate >/dev/null 2>&1 || true
