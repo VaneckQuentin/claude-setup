@@ -25,7 +25,7 @@ read_server_env() {
       # reg.exe lives in System32, which is often not directly on the MSYS PATH.
       local reg="reg"
       command -v reg >/dev/null 2>&1 || reg="/c/Windows/System32/reg.exe"
-      val="$("$reg" query 'HKCU\Environment' //v "$name" 2>/dev/null | grep -Eo "$name[[:space:]]+REG_[A-Z_]+[[:space:]]+.*" | awk '{print $NF}')"
+      val="$("$reg" query 'HKCU\Environment' //v "$name" 2>/dev/null | grep -Eo "${name}[[:space:]]+REG_[A-Z_]+[[:space:]]+.*" | awk '{print $NF}')"
       ;;
     Darwin)
       command -v launchctl >/dev/null 2>&1 && val="$(launchctl getenv "$name" 2>/dev/null || true)"
