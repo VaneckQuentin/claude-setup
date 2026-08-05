@@ -14,32 +14,49 @@ set -euo pipefail
 OLLAMA_HOST="http://localhost:11434"
 ENVFILE="$HOME/.claude/local-mode/models.env"
 
+# Read an Ollama server env var the way the RUNNING server would see it, across
+# platforms: current shell env first, then the OS's persistent user store
+# (Windows registry / macOS launchctl). Echoes the value or empty.
+read_server_env() {
+  local name="$1" val="${!1:-}"
+  [[ -n "$val" ]] && { printf '%s' "$val"; return; }
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+      # reg.exe lives in System32, which is often not directly on the MSYS PATH.
+      local reg="reg"
+      command -v reg >/dev/null 2>&1 || reg="/c/Windows/System32/reg.exe"
+      val="$("$reg" query 'HKCU\Environment' //v "$name" 2>/dev/null | grep -Eo "$name[[:space:]]+REG_[A-Z_]+[[:space:]]+.*" | awk '{print $NF}')"
+      ;;
+    Darwin)
+      command -v launchctl >/dev/null 2>&1 && val="$(launchctl getenv "$name" 2>/dev/null || true)"
+      ;;
+  esac
+  printf '%s' "$val"
+}
+
 # Server-side tuning we can only detect and warn about, not fix from here
-# (both are settable in the Ollama app UI, which launchctl cannot see).
+# (both are settable via the OS user env or the Ollama app UI).
 server_tuning_warnings() {
   # Context length: a Claude Code session needs a BIG window (the system
   # prompt alone is ~20K tokens); Ollama's default is far smaller and
   # silently truncates.
-  local ctx="${OLLAMA_CONTEXT_LENGTH:-}"
-  [[ -z "$ctx" ]] && command -v launchctl >/dev/null 2>&1 && ctx="$(launchctl getenv OLLAMA_CONTEXT_LENGTH 2>/dev/null || true)"
+  local ctx; ctx="$(read_server_env OLLAMA_CONTEXT_LENGTH)"
   if ! [[ "$ctx" =~ ^[0-9]+$ && "$ctx" -ge 65536 ]]; then
     echo "WARNING: Ollama server context length looks small or unset (${ctx:-default})." >&2
     echo "  Full-local mode needs >=64K or the session truncates its own instructions." >&2
-    echo "  Fix: Ollama app -> Settings -> Context length, or restart the server with" >&2
-    echo "    OLLAMA_CONTEXT_LENGTH=131072 ollama serve" >&2
-    echo "  (If you already set it in the app UI, ignore this — it isn't detectable here.)" >&2
+    echo "  Fix (Windows): setx OLLAMA_CONTEXT_LENGTH 65536, then restart the Ollama app." >&2
+    echo "  (macOS: launchctl setenv OLLAMA_CONTEXT_LENGTH 65536; or set it in the app UI.)" >&2
   fi
 
   # Keep-alive: the default 5m unloads the ~20GB orchestrator between turns —
   # every resume then pays a full model reload + prompt re-prefill.
-  local ka="${OLLAMA_KEEP_ALIVE:-}"
-  [[ -z "$ka" ]] && command -v launchctl >/dev/null 2>&1 && ka="$(launchctl getenv OLLAMA_KEEP_ALIVE 2>/dev/null || true)"
+  local ka; ka="$(read_server_env OLLAMA_KEEP_ALIVE)"
   if ! keep_alive_is_long "$ka"; then
     echo "WARNING: OLLAMA_KEEP_ALIVE looks short or unset (${ka:-default 5m})." >&2
     echo "  Idle >5min unloads the orchestrator model; the next turn pays a full" >&2
     echo "  reload + re-prefill. Set it to 1h (or -1 = never unload):" >&2
-    echo "    launchctl setenv OLLAMA_KEEP_ALIVE 1h   (then restart the Ollama app)" >&2
-    echo "  (If you already set it in the app UI, ignore this — it isn't detectable here.)" >&2
+    echo "  Fix (Windows): setx OLLAMA_KEEP_ALIVE 1h, then restart the Ollama app." >&2
+    echo "  (macOS: launchctl setenv OLLAMA_KEEP_ALIVE 1h; or set it in the app UI.)" >&2
   fi
 }
 
@@ -82,7 +99,22 @@ fi
 # shellcheck disable=SC1090
 source "$ENVFILE"
 
-# 4. Launch Claude Code pointed straight at Ollama, in its own config dir.
+# 4. Permission mode. Claude Code's default permission flow asks a REMOTE
+# Anthropic classifier to vet each tool call. Full-local mode has no Anthropic
+# API (base URL points at Ollama), so that classifier fails closed and blocks
+# every Bash/Task/Agent call — this is what stops subagents from spawning.
+# Offline we pre-approve the tools the local agents actually use via an explicit
+# allow-list (checked BEFORE the classifier, so it is never consulted). The
+# commit-guard PreToolUse hook still runs regardless, so credential-commit
+# protection is unaffected. Extra tools can be allowed with normal `claude`
+# args, which are appended after these.
+LOCAL_ALLOWED_TOOLS=(
+  Task Bash Read Edit Write Grep Glob WebFetch WebSearch TodoWrite
+  mcp__ollama-delegate__ollama_run mcp__ollama-delegate__ollama_list_models
+  mcp__serena mcp__radare2
+)
+
+# 5. Launch Claude Code pointed straight at Ollama, in its own config dir.
 echo "FULL-LOCAL mode — orchestrator: ${ANTHROPIC_MODEL} (via Ollama, no proxy)."
 echo "Note: local models are weaker at long agentic chains; keep tasks tight."
 exec env \
@@ -93,4 +125,4 @@ exec env \
   ANTHROPIC_MODEL="$ANTHROPIC_MODEL" \
   ANTHROPIC_SMALL_FAST_MODEL="$ANTHROPIC_SMALL_FAST_MODEL" \
   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1" \
-  claude "$@"
+  claude --allowedTools "${LOCAL_ALLOWED_TOOLS[@]}" "$@"
