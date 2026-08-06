@@ -56,6 +56,15 @@
             "statusMessage": "Commit guard…"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$HOME/.claude/hooks/run-hook.sh\" \"$HOME/.claude/hooks/keep-awake.py\" ensure",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolUse": [

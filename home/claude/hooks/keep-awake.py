@@ -8,6 +8,10 @@ agentic turns survive an unattended machine.
 Modes (argv[1]):
   start  UserPromptSubmit hook. Spawns a detached "holder" process and records
          its pid in a per-session file under the temp dir.
+  ensure PreToolUse hook (all tools). Spawns the holder only if none is
+         alive for this session. Turns re-woken by task notifications and
+         background subagents never fire UserPromptSubmit — their tool calls
+         are the only signal we get, so this re-arms coverage there.
   stop   Stop / SessionEnd hook. Deletes the pid file; the holder notices
          within one poll interval and releases the assertion.
   hold   Internal: the holder itself (argv: hold <pidfile> <ttl_seconds>).
@@ -47,10 +51,40 @@ def pidfile_for_session() -> str:
     return os.path.join(tempfile.gettempdir(), f"claude-keepawake-{safe}.pid")
 
 
-def start() -> None:
+def holder_alive(pidfile: str) -> bool:
+    """Best-effort: does the pid file name a live holder process?"""
+    try:
+        with open(pidfile) as f:
+            pid = int(f.read().strip())
+    except (OSError, ValueError):
+        return False
+    if sys.platform == "win32":
+        # NEVER os.kill() here — on Windows any signal terminates the target.
+        import ctypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = ctypes.windll.kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, pid
+        )
+        if not handle:
+            return False
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return True
+    out = subprocess.run(
+        ["ps", "-o", "command=", "-p", str(pid)],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    ).stdout
+    return "keep-awake.py" in out
+
+
+def start(only_if_missing: bool = False) -> None:
     if sys.platform not in ("darwin", "win32"):
         return
     pidfile = pidfile_for_session()
+    if only_if_missing and holder_alive(pidfile):
+        return
     script = os.path.abspath(__file__)
     kwargs = {
         "stdin": subprocess.DEVNULL,
@@ -141,6 +175,8 @@ def main() -> None:
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     if mode == "start":
         start()
+    elif mode == "ensure":
+        start(only_if_missing=True)
     elif mode == "stop":
         stop()
     elif mode == "hold" and len(sys.argv) >= 4:
