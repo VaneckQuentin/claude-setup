@@ -96,6 +96,11 @@ Drop exploration transcripts and raw tool output first — never the above.
   local models — they are weaker at multi-step agentic reasoning.
 - Don't let tool output you'll never reuse accumulate in context. Delegate it,
   or read narrowly.
+- Don't litter the repo root with working files. Intermediate artifacts
+  (dumps, scratch scripts, extracted data, notes-to-self) go to the session
+  scratchpad or ONE dedicated untracked dir (e.g. `.work/`). Deliverables
+  follow the project's existing layout; if the project has none, create a
+  minimal sensible one and say so in the summary.
 - Keep CLAUDE.md and early context stable to preserve prompt caching.
 
 ## Pipelines & parallelism
