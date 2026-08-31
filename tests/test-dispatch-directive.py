@@ -73,6 +73,8 @@ check("false positive: 'run all the tests' -> no injection",
       run_hook("please run all the tests and fix what fails") == "")
 check("false positive: 'enumerate' code review -> no injection",
       run_hook("use enumerate instead of range(len(x)) here") == "")
+check("false positive (FR): 'lance tous les tests' -> no injection",
+      run_hook("lance tous les tests et corrige ce qui echoue") == "")
 
 # Genuinely bulk prompts must still trigger.
 check("bulk: summarize a long log file -> injects",

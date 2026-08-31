@@ -157,16 +157,27 @@ python3 -m json.tool "$SETTINGS" >/dev/null 2>&1 \
 # than `git clone` (which would clone the worktree's last COMMIT and miss
 # any uncommitted changes under test) — self-contained, decoupled from the
 # real worktree's .git, and gives capture.sh's "uncommitted changes under
-# home/" guard a clean baseline to diff against.
+# home/" guard a clean baseline to diff against. This repo dogfoods its own
+# worktree-isolated agents under .claude/worktrees/ — each one a nested git
+# checkout — so .claude (and .git) are dropped before any git command runs:
+# copying them in would make `git add -A` below try to add embedded repos
+# (noisy "warning: adding embedded git repository" spam) and would waste
+# time copying potentially many sibling worktrees we don't need.
 CLONE="$TMP_ROOT/clone"
 mkdir -p "$CLONE"
 cp -R "$REPO/." "$CLONE"
-rm -rf "${CLONE:?}/.git"
+rm -rf "${CLONE:?}/.git" "${CLONE:?}/.claude"
 git -C "$CLONE" init -q
 git -C "$CLONE" config user.email "test@example.com"
 git -C "$CLONE" config user.name "Test"
-git -C "$CLONE" add -A
+add_out="$(git -C "$CLONE" add -A 2>&1)"
 git -C "$CLONE" commit -q -m "snapshot for capture.sh sandbox test"
+if grep -q "embedded git repository" <<<"$add_out"; then
+  bad "5x clone excludes .claude/.git (no embedded-repo warning)"
+  echo "$add_out" >&2
+else
+  ok "5x clone excludes .claude/.git (no embedded-repo warning)"
+fi
 
 # --- 5. clean-abort on a corrupt live settings.json -------------------
 CORRUPT_HOME="$TMP_ROOT/corrupt-home"
@@ -215,6 +226,115 @@ if grep -q '"model"' "$CLONE/home/claude/settings.json"; then
   bad "6c captured settings.json has no model key"
 else
   ok "6c captured settings.json has no model key"
+fi
+
+# =====================================================================
+# 7. settings.json merge robustness: idempotence + non-ASCII round-trip.
+# =====================================================================
+SANDBOX_MERGE="$TMP_ROOT/sandbox-merge"
+mkdir -p "$SANDBOX_MERGE"
+run_install "$SANDBOX_MERGE"
+SETTINGS_MERGE="$SANDBOX_MERGE/.claude/settings.json"
+
+# 7a: a divergence that carries ZERO machine-local keys (same keys/values,
+# just reformatted) must not make install.sh rewrite the file — the old
+# code unconditionally re-dumped it even when nothing was merged, silently
+# byte-diverging it from the repo copy (default ensure_ascii escaping) and
+# so littering a FRESH backup on every single subsequent re-run forever.
+python3 - "$SETTINGS_MERGE" <<'PY'
+import json, sys
+path = sys.argv[1]
+data = json.load(open(path))
+with open(path, "w") as f:
+    json.dump(data, f, indent=4)  # same content, different formatting
+    f.write("\n")
+PY
+run_install "$SANDBOX_MERGE"   # 1st re-run: reformat differs -> one backup
+# STAMP has 1-second resolution — sleep so the two re-runs can't collide on
+# the same *.bak.<timestamp> filename and mask a real second backup.
+sleep 1
+run_install "$SANDBOX_MERGE"   # 2nd re-run: must NOT add a second backup
+bak_count="$(ls "$SETTINGS_MERGE".bak.* 2>/dev/null | wc -l | tr -d ' ')"
+[[ "$bak_count" == 1 ]] \
+  && ok "7a reformat-only divergence (no machine-local keys) litters exactly one backup, not one per re-run" \
+  || bad "7a reformat-only divergence (no machine-local keys) litters exactly one backup ($bak_count found)"
+cmp -s "$REPO/home/claude/settings.json" "$SETTINGS_MERGE" \
+  && ok "7a2 file is byte-identical to the repo copy after a no-op merge (no needless rewrite)" \
+  || bad "7a2 file is byte-identical to the repo copy after a no-op merge (no needless rewrite)"
+
+# 7b: a real merge (a key genuinely gets carried over) must still preserve
+# non-ASCII repo values byte-identically instead of \uXXXX-escaping them.
+python3 - "$SETTINGS_MERGE" <<'PY'
+import json, sys
+path = sys.argv[1]
+data = json.load(open(path))
+data["model"] = "claude-z"  # forces a genuine key restoration -> real rewrite
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+PY
+run_install "$SANDBOX_MERGE"
+if grep -qF "Routing…" "$SETTINGS_MERGE" && ! grep -q '\\u2026' "$SETTINGS_MERGE"; then
+  ok "7b non-ASCII repo value ('Routing…') survives a real merge rewrite un-escaped"
+else
+  bad "7b non-ASCII repo value ('Routing…') survives a real merge rewrite un-escaped"
+fi
+
+# =====================================================================
+# 8. sync-local.sh --plans (headless smoke test).
+# =====================================================================
+if plans_out="$(HOME="$SANDBOX" "$SANDBOX/.claude/local-mode/sync-local.sh" --plans 2>&1)"; then
+  ok "8a sync-local.sh --plans exits 0"
+else
+  bad "8a sync-local.sh --plans exits 0"
+  echo "$plans_out" >&2
+fi
+plans_ok=1
+for preset in eco balanced best; do
+  grep -q "$preset" <<<"$plans_out" || { echo "  missing preset in output: $preset" >&2; plans_ok=0; }
+done
+[[ "$plans_ok" == 1 ]] \
+  && ok "8b --plans output mentions eco/balanced/best" \
+  || bad "8b --plans output mentions eco/balanced/best"
+
+# =====================================================================
+# 9. Legacy "claude-fable-5" model-pin exclusion.
+# =====================================================================
+SANDBOX_FABLE="$TMP_ROOT/sandbox-fable"
+mkdir -p "$SANDBOX_FABLE"
+run_install "$SANDBOX_FABLE"
+SETTINGS_FABLE="$SANDBOX_FABLE/.claude/settings.json"
+
+python3 - "$SETTINGS_FABLE" <<'PY'
+import json, sys
+path = sys.argv[1]
+data = json.load(open(path))
+data["model"] = "claude-fable-5"
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+PY
+run_install "$SANDBOX_FABLE"
+if grep -q '"model"' "$SETTINGS_FABLE"; then
+  bad "9a legacy 'claude-fable-5' pin is NOT resurrected on upgrade"
+else
+  ok "9a legacy 'claude-fable-5' pin is NOT resurrected on upgrade"
+fi
+
+python3 - "$SETTINGS_FABLE" <<'PY'
+import json, sys
+path = sys.argv[1]
+data = json.load(open(path))
+data["model"] = "claude-opus-4"  # any OTHER model value is a deliberate pin
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+PY
+run_install "$SANDBOX_FABLE"
+if grep -q '"model": *"claude-opus-4"' "$SETTINGS_FABLE"; then
+  ok "9b a non-legacy model pin DOES survive an upgrade"
+else
+  bad "9b a non-legacy model pin DOES survive an upgrade"
 fi
 
 if [[ "$fail" == 0 ]]; then

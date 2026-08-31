@@ -89,6 +89,7 @@ try:
     with open(dest_path) as f:
         new = json.load(f)
     if isinstance(old, dict) and isinstance(new, dict):
+        changed = False
         for key, value in old.items():
             if key in new:
                 continue
@@ -97,9 +98,17 @@ try:
             if key == "model" and value == "claude-fable-5":
                 continue
             new[key] = value
-        with open(dest_path, "w") as f:
-            json.dump(new, f, indent=2)
-            f.write("\n")
+            changed = True
+        # Only rewrite when something was actually carried over — otherwise
+        # the file is already the freshly-copied repo content, and
+        # re-dumping it unconditionally would needlessly diverge it byte-
+        # for-byte from the repo (ensure_ascii escaping, formatting), which
+        # then looks like a fresh user edit and litters a new backup on
+        # every subsequent re-run.
+        if changed:
+            with open(dest_path, "w") as f:
+                json.dump(new, f, indent=2, ensure_ascii=False)
+                f.write("\n")
 except Exception:
     pass
 PY
