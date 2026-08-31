@@ -91,7 +91,7 @@ def main():
         "classify", "categorize", "categorise", "audit all", "batch of",
         " logs", "log file", "log files", "these files", "all of them",
         # French (accent-free — the prompt is de-accented before matching)
-        "tous les ", "toutes les ", "chaque fichier", "chaque module",
+        "chaque fichier", "chaque module",
         "chaque controleur", "chaque classe", "chaque fonction", "pour chaque",
         "chacun des", "chacune des", "l'ensemble des", "l'ensemble du",
         "tout le code", "toute la codebase", "tout le repo", "tout le projet",
