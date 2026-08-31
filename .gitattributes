@@ -9,5 +9,11 @@
 *.json text eol=lf
 *.conf text eol=lf
 home/claude/local-mode/claude-local text eol=lf
+# MANIFEST drives install.sh/capture.sh's line-by-line reader — a CRLF
+# checkout leaves every entry with a trailing \r, so `home/$rel` never
+# resolves and install.sh silently "skips" all 33 paths.
+MANIFEST text eol=lf
+.github/**/*.yml text eol=lf
+.github/**/*.yaml text eol=lf
 # PowerShell is happy with either; keep the repo canonical as LF.
 *.ps1  text eol=lf
