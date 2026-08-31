@@ -94,6 +94,24 @@ REPO_FORBIDDEN="$(new_repo)"
 : > "$REPO_FORBIDDEN/.pgpass"
 git -C "$REPO_FORBIDDEN" add id_ecdsa server.key .pgpass
 
+# Repo with an UNTRACKED file containing a fake AWS key (never staged nor
+# committed — only present on disk). Covers the same-command staging gap:
+# the guard runs BEFORE the command, so `git add` in the same command line
+# as `git commit` must be treated as if it already ran.
+REPO_UNTRACKED_SECRET="$(new_repo)"
+echo "hello" > "$REPO_UNTRACKED_SECRET/file.txt"
+git -C "$REPO_UNTRACKED_SECRET" add file.txt
+git -C "$REPO_UNTRACKED_SECRET" commit -q -m init
+printf 'AWS_KEY=AKIA1234567890ABCDEF\n' > "$REPO_UNTRACKED_SECRET/creds.txt"
+
+# Repo with only a clean UNTRACKED file — no secret anywhere in it, so
+# staging + committing must still be allowed.
+REPO_UNTRACKED_CLEAN="$(new_repo)"
+echo "hello" > "$REPO_UNTRACKED_CLEAN/file.txt"
+git -C "$REPO_UNTRACKED_CLEAN" add file.txt
+git -C "$REPO_UNTRACKED_CLEAN" commit -q -m init
+printf 'nothing sensitive here\n' > "$REPO_UNTRACKED_CLEAN/clean.txt"
+
 OTHER_DIR="$(mktemp -d "$TMP_ROOT/other.XXXXXX")"
 
 # --- required behaviors ---------------------------------------------------
@@ -149,6 +167,20 @@ check "15 [M2] -mX -a (real -a, separate token), unstaged secret -> blocked" \
 
 check "16 [M3] git log --grep=commit, staged PEM -> allowed (read-only)" \
   0 "git log --grep=commit" "$REPO_STAGED"
+
+# --- Finding 1: same-command staging (git add ... && git commit ...) -----
+
+check "17 [F1] git add <untracked AWS key> && git commit -> blocked" \
+  2 "git add creds.txt && git commit -m x" "$REPO_UNTRACKED_SECRET"
+
+check "18 [F1] git add -A && git commit -am, untracked AWS key -> blocked" \
+  2 "git add -A && git commit -am x" "$REPO_UNTRACKED_SECRET"
+
+check "19 [F1] git add <untracked clean file> && git commit -> allowed" \
+  0 "git add clean.txt && git commit -m x" "$REPO_UNTRACKED_CLEAN"
+
+check "20 [F1] git add <untracked file>, no commit in command -> allowed" \
+  0 "git add creds.txt" "$REPO_UNTRACKED_SECRET"
 
 # --------------------------------------------------------------------------
 

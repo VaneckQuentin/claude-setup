@@ -89,15 +89,23 @@ def tokenize(command):
 
 
 def parse_git_invocation(tokens):
-    """If `tokens` is a `git ...` invocation, return (is_commit, cd_dirs)
-    where cd_dirs are the `-C <path>` values in the order given (git
-    composes repeated -C relative to each other, then to cwd). Return None
-    if `tokens` doesn't even start with `git`.
+    """If `tokens` is a `git ...` invocation, return (subcommand, cd_dirs)
+    where `subcommand` is the first non-option token (e.g. "commit", "add",
+    "stage"; None if the invocation is only global options) and cd_dirs are
+    the `-C <path>` values in the order given (git composes repeated -C
+    relative to each other, then to cwd). Return None if `tokens` doesn't
+    even start with `git`.
 
     Known limitation: `--git-dir=`/`--work-tree=`/a `GIT_DIR=` env prefix
     can also retarget which repo git operates on; we don't follow those, so
     a command relying on them gets scanned against the wrong (cwd) repo.
-    Not a regression — the old regex didn't follow them either."""
+    Not a regression — the old regex didn't follow them either.
+
+    Known limitation: a wrapper that hides the invocation behind a quoted
+    sub-shell, e.g. `bash -c "git commit -m x"`, is invisible to us —
+    tokenize() collapses the quoted string into a single opaque token, and
+    we don't recursively parse it. Accepted gap, not an adversarial threat
+    model."""
     if not tokens or tokens[0] != "git":
         return None
     cd_dirs = []
@@ -115,8 +123,8 @@ def parse_git_invocation(tokens):
         if tok.startswith("-"):
             i += 1  # other global flag with no argument (-p, --no-pager, …)
             continue
-        return (tok == "commit", cd_dirs)  # first non-option token = subcommand
-    return (False, cd_dirs)
+        return (tok, cd_dirs)  # first non-option token = subcommand
+    return (None, cd_dirs)
 
 
 def _short_cluster_has_a(letters):
@@ -181,6 +189,34 @@ def looks_like_commit_pipeline(tokens):
             and any(COMMIT_WORD_RE.match(t) for t in tokens))
 
 
+def command_stages(statement):
+    """Split one statement's tokens into pipeline stages on `|` (only `|`
+    separates stages of the SAME statement; see find_commit_invocations)."""
+    stages = [[]]
+    for tok in statement:
+        if tok == "|":
+            stages.append([])
+        else:
+            stages[-1].append(tok)
+    return [s for s in stages if s]
+
+
+def has_staging_statement(statements):
+    """True if the command contains a `git add`/`git stage` invocation
+    anywhere (any stage of any statement). The guard runs BEFORE the shell
+    command executes, so a staging statement earlier in the same command
+    line as a commit (e.g. `git add creds.txt && git commit -m x`) would
+    otherwise slip a not-yet-staged secret past the scan. Deliberately not
+    tied to matching cwd or ordering against the commit statement — a
+    same-command `add` anywhere is treated as if it already ran, over-
+    blocking beats missing a secret."""
+    return any(
+        invocation and invocation[0] in ("add", "stage")
+        for statement in statements
+        for invocation in (parse_git_invocation(stage) for stage in command_stages(statement))
+    )
+
+
 def find_commit_invocations(command, start_cwd):
     """Walk `command` statement by statement (split on ;/&&/||/&/newline),
     tracking `cd` so it carries into later statements the way a real shell
@@ -188,7 +224,11 @@ def find_commit_invocations(command, start_cwd):
     remaining statement, split into pipeline stages on `|` and look for a
     `git ... commit` invocation in each stage; fall back to the best-effort
     pipe/xargs heuristic if no stage matches directly. Yields one
-    (cwd, include_unstaged) pair per detected commit invocation."""
+    (cwd, include_unstaged, include_untracked) tuple per detected commit
+    invocation — include_untracked is set for every commit in the command
+    if the command ALSO contains a `git add`/`git stage` statement (see
+    has_staging_statement), since that staging would run before the commit
+    even though the guard only sees the commit's own already-staged diff."""
     tokens = tokenize(command)
 
     statements = [[]]
@@ -199,6 +239,8 @@ def find_commit_invocations(command, start_cwd):
             statements[-1].append(tok)
     statements = [s for s in statements if s]
 
+    same_command_staging = has_staging_statement(statements)
+
     cwd = start_cwd
     invocations = []
     for statement in statements:
@@ -207,27 +249,25 @@ def find_commit_invocations(command, start_cwd):
             cwd = cd_dir if os.path.isabs(cd_dir) else os.path.normpath(os.path.join(cwd, cd_dir))
             continue
 
-        stages = [[]]
-        for tok in statement:
-            if tok == "|":
-                stages.append([])
-            else:
-                stages[-1].append(tok)
-        stages = [s for s in stages if s]
+        stages = command_stages(statement)
 
         matched = False
         for stage in stages:
             invocation = parse_git_invocation(stage)
-            if invocation and invocation[0]:
+            if invocation and invocation[0] == "commit":
                 _, cd_dirs = invocation
                 stage_cwd = cwd
                 for d in cd_dirs:
                     d = os.path.expanduser(d)
                     stage_cwd = d if os.path.isabs(d) else os.path.normpath(os.path.join(stage_cwd, d))
-                invocations.append((stage_cwd, commit_all_flag(stage)))
+                invocations.append((stage_cwd,
+                                     commit_all_flag(stage) or same_command_staging,
+                                     same_command_staging))
                 matched = True
         if not matched and looks_like_commit_pipeline(statement):
-            invocations.append((cwd, commit_all_flag(statement)))
+            invocations.append((cwd,
+                                 commit_all_flag(statement) or same_command_staging,
+                                 same_command_staging))
 
     return invocations
 
@@ -237,7 +277,46 @@ def added_lines(diff):
             if l.startswith("+") and not l.startswith("+++")]
 
 
-def scan(cwd, include_unstaged):
+# Cap per-file reads when scanning untracked files (see scan_untracked_files):
+# there's no `git diff` to lean on for them, so a huge untracked blob could
+# otherwise stall the scan.
+UNTRACKED_FILE_READ_CAP = 1_000_000  # bytes
+
+
+def untracked_file_paths(cwd):
+    """Relative paths of untracked files (`git status` `??` entries).
+    Uses `-z` (NUL-separated, unquoted paths) so filenames with spaces or
+    special characters parse safely."""
+    status = git(["status", "--porcelain", "-z", "--untracked-files=all"], cwd)
+    return [entry[3:] for entry in status.split("\0") if entry.startswith("?? ")]
+
+
+def scan_untracked_files(cwd, checks):
+    """Untracked files have no `git diff` to scan, so read them directly.
+    Mirrors the tracked-file checks in scan(): forbidden filenames block
+    outright, content is scanned line by line, binaries are skipped (null-
+    byte sniff — same effect as git diff's "Binary files … differ"), and
+    reads are capped at UNTRACKED_FILE_READ_CAP."""
+    findings = []
+    for rel_path in untracked_file_paths(cwd):
+        if FORBIDDEN_FILES.search(rel_path):
+            findings.append(f"forbidden file staged: {rel_path}")
+        try:
+            with open(os.path.join(cwd, rel_path), "rb") as fh:
+                data = fh.read(UNTRACKED_FILE_READ_CAP)
+        except OSError:
+            continue
+        if b"\0" in data:
+            continue  # binary
+        for line in data.decode("utf-8", "replace").splitlines():
+            for rx, label in checks:
+                if rx.search(line):
+                    findings.append(f"{label}: {line.strip()[:120]}")
+                    break
+    return findings
+
+
+def scan(cwd, include_unstaged, include_untracked=False):
     findings = []
     names = git(["diff", "--cached", "--name-only"], cwd)
     diff = git(["diff", "--cached", "-U0"], cwd)
@@ -255,6 +334,10 @@ def scan(cwd, include_unstaged):
             if rx.search(line):
                 findings.append(f"{label}: {line.strip()[:120]}")
                 break
+
+    if include_untracked:  # a same-command `git add`/`git stage` would pull these in too
+        findings.extend(scan_untracked_files(cwd, checks))
+
     return findings
 
 
@@ -264,7 +347,7 @@ def main():
 
     if len(sys.argv) > 1 and sys.argv[1] == "--staged":  # manual mode
         cwd = sys.argv[2] if len(sys.argv) > 2 else os.getcwd()
-        invocations = [(cwd, False)]
+        invocations = [(cwd, False, False)]
     else:  # hook mode
         try:
             data = json.load(sys.stdin)
@@ -281,8 +364,8 @@ def main():
 
     try:
         findings = []
-        for scan_cwd, include_unstaged in invocations:
-            findings.extend(scan(scan_cwd, include_unstaged))
+        for scan_cwd, include_unstaged, include_untracked in invocations:
+            findings.extend(scan(scan_cwd, include_unstaged, include_untracked))
     except Exception:
         return 0  # fail-open
 
