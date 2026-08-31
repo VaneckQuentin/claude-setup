@@ -103,6 +103,9 @@ python3 tests/test-dispatch-directive.py || { echo "FAIL: tests/test-dispatch-di
 echo "== launcher keep-alive check (tests/test-keep-alive.sh)"
 bash tests/test-keep-alive.sh || { echo "FAIL: tests/test-keep-alive.sh"; fail=1; }
 
+echo "== install.sh / capture.sh sandbox behavior (tests/test-install-capture.sh)"
+bash tests/test-install-capture.sh || { echo "FAIL: tests/test-install-capture.sh"; fail=1; }
+
 echo "== powershell launcher (tests/test-claude-local-ps.ps1)"
 # CI (ubuntu) ships pwsh; locally, point PWSH at a portable binary if needed.
 PWSH_BIN="${PWSH:-pwsh}"

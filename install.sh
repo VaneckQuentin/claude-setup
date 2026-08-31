@@ -48,11 +48,19 @@ command -v php     >/dev/null || echo "note: php not found — the lint hook wil
 
 echo "== Installing files"
 while IFS= read -r rel; do
+  rel="${rel%$'\r'}"
   rel="${rel%%#*}"; rel="$(echo "$rel" | xargs 2>/dev/null || true)"
   [[ -z "$rel" ]] && continue
   src="$REPO/home/$rel"
   dest="$(map_dest "$rel")"
   [[ -f "$src" ]] || { echo "WARNING: $src missing in repo, skipping." >&2; continue; }
+  # roles.conf is user-owned state (docs tell the user to edit it directly,
+  # sync-local.sh --plan rewrites it) — install-if-absent only, never
+  # overwritten by a re-run once it exists.
+  if [[ "$rel" == "claude/local-mode/roles.conf" && -f "$dest" ]]; then
+    echo "  kept existing roles.conf (user-owned): $dest"
+    continue
+  fi
   mkdir -p "$(dirname "$dest")"
   BACKUP=""
   if [[ -f "$dest" ]] && ! cmp -s "$src" "$dest"; then
@@ -65,8 +73,12 @@ while IFS= read -r rel; do
   fi
   cp "$src" "$dest"
   echo "  installed $dest"
-  # Preserve a machine-local top-level "model" pin across settings.json
-  # upgrades (the repo file doesn't ship one). Fail-soft: never abort install.
+  # Preserve machine-local top-level settings.json keys across upgrades: the
+  # repo wins on any key it ships, the backup (previous live file) wins on
+  # everything else — e.g. a "model" pin or Claude Code's own
+  # feedbackDrafts/modelSettings, which the repo doesn't know about.
+  # Fail-soft: never abort install; malformed backup JSON leaves the
+  # freshly-copied repo content in place untouched.
   if [[ -n "$BACKUP" && "$rel" == *settings.json ]]; then
     "$PYBIN" - "$BACKUP" "$dest" <<'PY' || true
 import json, sys
@@ -74,12 +86,17 @@ try:
     bak_path, dest_path = sys.argv[1], sys.argv[2]
     with open(bak_path) as f:
         old = json.load(f)
-    # "claude-fable-5" was only ever the repo's OLD shipped default, not a
-    # deliberate user choice — don't resurrect it on upgrade.
-    if isinstance(old, dict) and "model" in old and old["model"] != "claude-fable-5":
-        with open(dest_path) as f:
-            new = json.load(f)
-        new["model"] = old["model"]
+    with open(dest_path) as f:
+        new = json.load(f)
+    if isinstance(old, dict) and isinstance(new, dict):
+        for key, value in old.items():
+            if key in new:
+                continue
+            # "claude-fable-5" was only ever the repo's OLD shipped default,
+            # not a deliberate user choice — don't resurrect it on upgrade.
+            if key == "model" and value == "claude-fable-5":
+                continue
+            new[key] = value
         with open(dest_path, "w") as f:
             json.dump(new, f, indent=2)
             f.write("\n")

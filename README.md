@@ -15,6 +15,7 @@ personal data live here — install it, log in, and it works.
 | Dispatch hook (bulk-intent gate, FR+EN) | `home/claude/hooks/dispatch-directive.py` |
 | Commit guard (blocks commits leaking secrets/personal data) | `home/claude/hooks/commit-guard.py` |
 | Post-edit lint hook (token-free syntax checks) | `home/claude/hooks/post-edit-lint.py` |
+| Keep-awake hook (blocks idle SYSTEM sleep for the length of a turn; macOS `caffeinate`, native Windows `SetThreadExecutionState`; silent no-op under WSL2/Linux; `CLAUDE_KEEP_AWAKE_MAX_HOURS` caps the hold, default 8h) | `home/claude/hooks/keep-awake.py` |
 | Hybrid subagents (haiku/sonnet/opus tiers) | `home/claude/agents/*.md` |
 | `/model-preset` command (show/switch the subagent model preset) | `home/claude/commands/model-preset.md` |
 | ollama-delegate MCP server | `home/claude/mcp-servers/ollama-delegate/server.py` |
@@ -84,15 +85,21 @@ git add -A && git commit && git push
 On other machines: `git pull && ./install.sh` (it backs up any diverging
 CLAUDE.md/settings.json to `*.bak.<timestamp>` first). The repo's
 `settings.json` never carries a model pin — `capture.sh` strips any local
-`model` key before it lands in the repo, and `install.sh` restores your
-machine's own pin from the backup on upgrade, so the choice stays
-per-machine.
+`model` key before it lands in the repo, and `install.sh` restores any
+machine-local top-level key the repo doesn't ship (your `model` pin, and
+anything Claude Code itself adds like `feedbackDrafts`/`modelSettings`) from
+the backup on upgrade — the repo always wins on keys it does ship.
+`home/claude/local-mode/roles.conf` is user-owned state (you edit it
+directly, `sync-local.sh --plan` rewrites it): install-if-absent only — once
+it exists on a machine, a re-run of `./install.sh` never overwrites it.
 
 Before committing, run `bash tests/lint.sh` — it checks shell/Python/JSON
 syntax, MANIFEST consistency, roles.conf-vs-agent-frontmatter drift, and the
-behavioral suites `tests/test-commit-guard.sh` and
-`tests/test-server-paths.py`. CI runs the same script plus `shellcheck` on
-every push/PR.
+behavioral suites under `tests/` (commit-guard, ollama-delegate path
+confinement, statusline, agent-progress, dispatch-directive, keep-alive,
+`install.sh`/`capture.sh` sandboxed install/capture behavior, and the
+PowerShell launcher). CI runs the same script plus `shellcheck` on every
+push/PR.
 
 ## Windows
 

@@ -15,6 +15,12 @@ if { ! git -C "$REPO" diff --quiet -- home/ 2>/dev/null || ! git -C "$REPO" diff
   exit 1
 fi
 
+# Probe for a WORKING interpreter, same as install.sh (Windows installs
+# python as python/py, no python3; Microsoft Store aliases add fake stubs).
+PYBIN=""
+for c in python3 python py; do "$c" -c "" >/dev/null 2>&1 && { PYBIN="$c"; break; }; done
+[[ -n "$PYBIN" ]] || { echo "ERROR: no working python found (tried python3, python, py)." >&2; exit 1; }
+
 map_src() {
   case "$1" in
     claude-local/*) echo "$HOME/.claude-local/${1#claude-local/}" ;;
@@ -23,35 +29,66 @@ map_src() {
   esac
 }
 
+# settings.json carries a machine-local top-level "model" pin that the repo
+# deliberately does not ship (see install.sh's model-pin preservation block)
+# — strip it into a scratch copy BEFORE anything touches the repo, so a
+# corrupt live settings.json aborts cleanly instead of leaving a partial
+# capture (and re-tripping the CAPTURE_FORCE guard above).
+SCRATCH="$(mktemp -d)"
+trap 'rm -rf "$SCRATCH"' EXIT
+
+strip_model_pin() { # <src settings.json> <out path> — repo-relative path
+                     # kept as the scratch filename to avoid basename
+                     # collisions (claude/settings.json vs claude-local/*).
+  local src="$1" out="$2"
+  mkdir -p "$(dirname "$out")"
+  "$PYBIN" - "$src" "$out" <<'PY'
+import json, sys
+src_path, out_path = sys.argv[1], sys.argv[2]
+with open(src_path) as f:
+    data = json.load(f)
+if isinstance(data, dict) and "model" in data:
+    del data["model"]
+with open(out_path, "w") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+PY
+}
+
+manifest_entries() {
+  while IFS= read -r rel; do
+    rel="${rel%$'\r'}"
+    rel="${rel%%#*}"; rel="$(echo "$rel" | xargs 2>/dev/null || true)"
+    [[ -z "$rel" ]] && continue
+    printf '%s\n' "$rel"
+  done < "$REPO/MANIFEST"
+}
+
+echo "== Validating live sources"
 while IFS= read -r rel; do
-  rel="${rel%%#*}"; rel="$(echo "$rel" | xargs 2>/dev/null || true)"
-  [[ -z "$rel" ]] && continue
+  src="$(map_src "$rel")"
+  [[ -f "$src" ]] || { echo "WARNING: $src not found on this machine, skipping." >&2; continue; }
+  [[ "$rel" == *settings.json ]] || continue
+  strip_model_pin "$src" "$SCRATCH/$rel" \
+    || { echo "ERROR: failed to read/parse $src (corrupt settings.json?) — capture aborted, repo untouched." >&2; exit 1; }
+done < <(manifest_entries)
+
+echo "== Capturing"
+while IFS= read -r rel; do
   src="$(map_src "$rel")"
   dest="$REPO/home/$rel"
-  [[ -f "$src" ]] || { echo "WARNING: $src not found on this machine, skipping." >&2; continue; }
+  [[ -f "$src" ]] || continue
   mkdir -p "$(dirname "$dest")"
   # Agent `model:` lines are captured verbatim, same as everything else:
   # roles.conf is captured in this same run, so the repo's roles.conf and
   # agent frontmatter derive from the same live state and stay consistent
   # by construction (see tests/lint.sh's roles.conf <-> frontmatter check).
-  cp "$src" "$dest"
-  # settings.json carries a machine-local top-level "model" pin that the repo
-  # deliberately does not ship (see install.sh's model-pin preservation block)
-  # — strip it so a capture doesn't republish it.
   if [[ "$rel" == *settings.json ]]; then
-    python3 - "$dest" <<'PY'
-import json, sys
-path = sys.argv[1]
-with open(path) as f:
-    data = json.load(f)
-if isinstance(data, dict) and "model" in data:
-    del data["model"]
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-        f.write("\n")
-PY
+    cp "$SCRATCH/$rel" "$dest"
+  else
+    cp "$src" "$dest"
   fi
-done < "$REPO/MANIFEST"
+done < <(manifest_entries)
 
 echo "Captured. Review with:  git -C $REPO status"
 git -C "$REPO" status --short 2>/dev/null || true
