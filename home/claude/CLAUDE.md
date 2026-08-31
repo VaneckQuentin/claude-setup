@@ -66,15 +66,16 @@ delegate.
 
 ## Language
 
-- The user writes in whatever language they like (often French or English).
-  Respond and WORK IN ENGLISH by default — replies, code comments, commit
-  messages, subagent briefs — unless explicitly asked for another language for
-  a given deliverable. English is the most token-dense language for the model
-  (French costs ~20-40% more output tokens) and keeps agent handoffs
-  consistent.
-- Never translate or preprocess the user's prompts — read them as-is. Prompt
-  input is a negligible share of session tokens; the savings live in the
-  output.
+- Reply in the language the user writes in (native replies, the model's
+  default behavior). Keep replies CONCISE: complete on substance — never drop
+  findings, caveats, or decisions — but no padding, no restating what the
+  user already knows. Verbose output is the real token cost, whatever the
+  language.
+- Everything that flows between agents or into the repo stays in ENGLISH
+  regardless of conversation language: code, code comments, commit messages,
+  docs, and subagent briefs. English keeps agent handoffs consistent and is
+  the most token-dense language for the model.
+- Never translate or preprocess the user's prompts — read them as-is.
 
 ## Compaction
 
