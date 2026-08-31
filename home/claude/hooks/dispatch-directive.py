@@ -80,14 +80,14 @@ def main():
     )
     BULK_SIGNALS = (
         "every ", "each file", "each of", "each controller", "each model",
-        "each module", "all files", "all the ", "all controllers", "all models",
+        "each module", "all files", "all controllers", "all models",
         "all classes", "all functions", "all endpoints", "all routes",
         "all the files", "across the whole", "across the entire",
         "across the codebase", "across the repo", "throughout the",
         "entire codebase", "whole codebase", "entire module", "whole module",
         "one-line", "one line summary", "summarize all", "summarize every",
         "summarise all", "summarise every", "list all", "list every",
-        "for each", "go through all", "go through every", "enumerate",
+        "for each", "go through all", "go through every",
         "classify", "categorize", "categorise", "audit all", "batch of",
         " logs", "log file", "log files", "these files", "all of them",
         # French (accent-free — the prompt is de-accented before matching)

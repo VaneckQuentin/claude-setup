@@ -66,6 +66,21 @@ check("non-bulk prompt -> no injection (both modes)",
       run_hook("fix the login bug in auth.php please") == ""
       and run_hook("fix the login bug in auth.php please", LOCAL_ENV) == "")
 check("short prompt -> no injection", run_hook("list all") == "")
+
+# False positives caught in the wild: ordinary prompts that loosely matched
+# bulk signals (" all the ", bare "enumerate") without being bulk work.
+check("false positive: 'run all the tests' -> no injection",
+      run_hook("please run all the tests and fix what fails") == "")
+check("false positive: 'enumerate' code review -> no injection",
+      run_hook("use enumerate instead of range(len(x)) here") == "")
+
+# Genuinely bulk prompts must still trigger.
+check("bulk: summarize a long log file -> injects",
+      run_hook("summarize this 2000-line log file") != "")
+check("bulk: classify many entries -> injects",
+      run_hook("classify these 500 entries by type") != "")
+check("bulk: list all places across the repo -> injects",
+      run_hook("list all the places X is called across the repo") != "")
 check("kill switch works in local mode too",
       run_hook(BULK_PROMPT, {**LOCAL_ENV, "CLAUDE_AUTODISPATCH": "0"}) == "")
 
