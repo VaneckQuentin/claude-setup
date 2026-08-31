@@ -201,20 +201,34 @@ def command_stages(statement):
     return [s for s in stages if s]
 
 
-def has_staging_statement(statements):
-    """True if the command contains a `git add`/`git stage` invocation
-    anywhere (any stage of any statement). The guard runs BEFORE the shell
-    command executes, so a staging statement earlier in the same command
-    line as a commit (e.g. `git add creds.txt && git commit -m x`) would
-    otherwise slip a not-yet-staged secret past the scan. Deliberately not
-    tied to matching cwd or ordering against the commit statement — a
-    same-command `add` anywhere is treated as if it already ran, over-
-    blocking beats missing a secret."""
-    return any(
-        invocation and invocation[0] in ("add", "stage")
-        for statement in statements
-        for invocation in (parse_git_invocation(stage) for stage in command_stages(statement))
-    )
+def staging_statement_flags(statements):
+    """Scan every stage of every statement for a `git add`/`git stage`
+    invocation. Returns (has_staging, has_forced_staging).
+
+    has_staging is True if any such invocation exists anywhere in the
+    command. The guard runs BEFORE the shell command executes, so a staging
+    statement earlier in the same command line as a commit (e.g. `git add
+    creds.txt && git commit -m x`) would otherwise slip a not-yet-staged
+    secret past the scan. Deliberately not tied to matching cwd or ordering
+    against the commit statement — a same-command `add` anywhere is treated
+    as if it already ran, over-blocking beats missing a secret.
+
+    has_forced_staging is True if one of those staging invocations also
+    carries `-f`/`--force` (cheap token-membership check, not a full
+    short-cluster parse like commit_all_flag's — good enough since a forced
+    add hidden inside a combined cluster isn't a realistic pattern here).
+    git silently skips gitignored paths on a plain `add`, so only a forced
+    add needs the extra `git status --ignored` pass (see scan())."""
+    has_staging = False
+    has_forced = False
+    for statement in statements:
+        for stage in command_stages(statement):
+            invocation = parse_git_invocation(stage)
+            if invocation and invocation[0] in ("add", "stage"):
+                has_staging = True
+                if "-f" in stage or "--force" in stage:
+                    has_forced = True
+    return has_staging, has_forced
 
 
 def find_commit_invocations(command, start_cwd):
@@ -224,11 +238,12 @@ def find_commit_invocations(command, start_cwd):
     remaining statement, split into pipeline stages on `|` and look for a
     `git ... commit` invocation in each stage; fall back to the best-effort
     pipe/xargs heuristic if no stage matches directly. Yields one
-    (cwd, include_unstaged, include_untracked) tuple per detected commit
-    invocation — include_untracked is set for every commit in the command
-    if the command ALSO contains a `git add`/`git stage` statement (see
-    has_staging_statement), since that staging would run before the commit
-    even though the guard only sees the commit's own already-staged diff."""
+    (cwd, include_unstaged, include_untracked, include_ignored) tuple per
+    detected commit invocation — include_untracked/include_ignored are set
+    for every commit in the command if the command ALSO contains a
+    `git add`/`git stage` statement (see staging_statement_flags), since
+    that staging would run before the commit even though the guard only
+    sees the commit's own already-staged diff."""
     tokens = tokenize(command)
 
     statements = [[]]
@@ -239,7 +254,7 @@ def find_commit_invocations(command, start_cwd):
             statements[-1].append(tok)
     statements = [s for s in statements if s]
 
-    same_command_staging = has_staging_statement(statements)
+    same_command_staging, same_command_forced_staging = staging_statement_flags(statements)
 
     cwd = start_cwd
     invocations = []
@@ -262,12 +277,14 @@ def find_commit_invocations(command, start_cwd):
                     stage_cwd = d if os.path.isabs(d) else os.path.normpath(os.path.join(stage_cwd, d))
                 invocations.append((stage_cwd,
                                      commit_all_flag(stage) or same_command_staging,
-                                     same_command_staging))
+                                     same_command_staging,
+                                     same_command_forced_staging))
                 matched = True
         if not matched and looks_like_commit_pipeline(statement):
             invocations.append((cwd,
                                  commit_all_flag(statement) or same_command_staging,
-                                 same_command_staging))
+                                 same_command_staging,
+                                 same_command_forced_staging))
 
     return invocations
 
@@ -277,33 +294,51 @@ def added_lines(diff):
             if l.startswith("+") and not l.startswith("+++")]
 
 
-# Cap per-file reads when scanning untracked files (see scan_untracked_files):
-# there's no `git diff` to lean on for them, so a huge untracked blob could
-# otherwise stall the scan.
-UNTRACKED_FILE_READ_CAP = 1_000_000  # bytes
+# Cap per-file reads when scanning files straight off disk (see
+# scan_disk_files): there's no `git diff` to lean on for them, so a huge
+# untracked/ignored blob could otherwise stall the scan.
+DISK_FILE_READ_CAP = 1_000_000  # bytes
 
 
 def untracked_file_paths(cwd):
-    """Relative paths of untracked files (`git status` `??` entries).
-    Uses `-z` (NUL-separated, unquoted paths) so filenames with spaces or
-    special characters parse safely."""
+    """Relative (to the repo root) paths of untracked files (`git status`
+    `??` entries). Uses `-z` (NUL-separated, unquoted paths) so filenames
+    with spaces or special characters parse safely."""
     status = git(["status", "--porcelain", "-z", "--untracked-files=all"], cwd)
     return [entry[3:] for entry in status.split("\0") if entry.startswith("?? ")]
 
 
-def scan_untracked_files(cwd, checks):
-    """Untracked files have no `git diff` to scan, so read them directly.
-    Mirrors the tracked-file checks in scan(): forbidden filenames block
-    outright, content is scanned line by line, binaries are skipped (null-
-    byte sniff — same effect as git diff's "Binary files … differ"), and
-    reads are capped at UNTRACKED_FILE_READ_CAP."""
+def ignored_file_paths(cwd):
+    """Relative (to the repo root) paths of gitignored files (`git status`
+    `!!` entries, via `--ignored=matching`). Only needed when a same-command
+    `git add -f`/`--force` would stage them despite .gitignore — a plain
+    `add` silently no-ops on ignored paths (see staging_statement_flags)."""
+    status = git(["status", "--porcelain", "-z", "--ignored=matching",
+                  "--untracked-files=all"], cwd)
+    return [entry[3:] for entry in status.split("\0") if entry.startswith("!! ")]
+
+
+def scan_disk_files(cwd, rel_paths, checks):
+    """Read files straight off disk and check them the same way scan()
+    checks diff content — used for untracked and (when forced) gitignored
+    files that a same-command `git add` would stage before any guard-
+    visible commit diff exists. `git status` paths are always relative to
+    the REPO ROOT regardless of the invocation cwd, so resolve the real
+    toplevel once rather than joining onto cwd (a cwd inside a subdirectory
+    would otherwise silently fail every open() and scan nothing). Mirrors
+    the tracked-file checks: forbidden filenames block outright, content
+    findings name the file (so a block from an untracked/ignored file can
+    actually be traced), binaries are skipped (null-byte sniff — same
+    effect as git diff's "Binary files … differ"), and reads are capped at
+    DISK_FILE_READ_CAP."""
+    toplevel = git(["rev-parse", "--show-toplevel"], cwd).strip() or cwd
     findings = []
-    for rel_path in untracked_file_paths(cwd):
+    for rel_path in rel_paths:
         if FORBIDDEN_FILES.search(rel_path):
             findings.append(f"forbidden file staged: {rel_path}")
         try:
-            with open(os.path.join(cwd, rel_path), "rb") as fh:
-                data = fh.read(UNTRACKED_FILE_READ_CAP)
+            with open(os.path.join(toplevel, rel_path), "rb") as fh:
+                data = fh.read(DISK_FILE_READ_CAP)
         except OSError:
             continue
         if b"\0" in data:
@@ -311,12 +346,12 @@ def scan_untracked_files(cwd, checks):
         for line in data.decode("utf-8", "replace").splitlines():
             for rx, label in checks:
                 if rx.search(line):
-                    findings.append(f"{label}: {line.strip()[:120]}")
+                    findings.append(f"{label} in {rel_path}: {line.strip()[:120]}")
                     break
     return findings
 
 
-def scan(cwd, include_unstaged, include_untracked=False):
+def scan(cwd, include_unstaged, include_untracked=False, include_ignored=False):
     findings = []
     names = git(["diff", "--cached", "--name-only"], cwd)
     diff = git(["diff", "--cached", "-U0"], cwd)
@@ -336,7 +371,9 @@ def scan(cwd, include_unstaged, include_untracked=False):
                 break
 
     if include_untracked:  # a same-command `git add`/`git stage` would pull these in too
-        findings.extend(scan_untracked_files(cwd, checks))
+        findings.extend(scan_disk_files(cwd, untracked_file_paths(cwd), checks))
+    if include_ignored:  # ... and `-f`/`--force` would pull in gitignored files too
+        findings.extend(scan_disk_files(cwd, ignored_file_paths(cwd), checks))
 
     return findings
 
@@ -347,7 +384,7 @@ def main():
 
     if len(sys.argv) > 1 and sys.argv[1] == "--staged":  # manual mode
         cwd = sys.argv[2] if len(sys.argv) > 2 else os.getcwd()
-        invocations = [(cwd, False, False)]
+        invocations = [(cwd, False, False, False)]
     else:  # hook mode
         try:
             data = json.load(sys.stdin)
@@ -364,8 +401,8 @@ def main():
 
     try:
         findings = []
-        for scan_cwd, include_unstaged, include_untracked in invocations:
-            findings.extend(scan(scan_cwd, include_unstaged, include_untracked))
+        for scan_cwd, include_unstaged, include_untracked, include_ignored in invocations:
+            findings.extend(scan(scan_cwd, include_unstaged, include_untracked, include_ignored))
     except Exception:
         return 0  # fail-open
 

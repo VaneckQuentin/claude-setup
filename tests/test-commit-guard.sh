@@ -65,6 +65,29 @@ check() { # <name> <expected_exit> <command> <cwd> [env_var=value ...]
   fi
 }
 
+# Like check(), but for a blocked case: also asserts the block message on
+# stderr names the offending file (so a user can actually find it).
+check_blocked_mentions() { # <name> <command> <cwd> <needle>
+  local name="$1" command="$2" cwd="$3" needle="$4" out got_exit got_stderr
+  out="$(python3 -c '
+import json, subprocess, sys
+command, cwd, hook = sys.argv[1], sys.argv[2], sys.argv[3]
+payload = json.dumps({"tool_input": {"command": command}, "cwd": cwd})
+r = subprocess.run([sys.executable, hook], input=payload,
+                    capture_output=True, text=True)
+print(r.returncode)
+print(r.stderr)
+' "$command" "$cwd" "$HOOK")"
+  got_exit="$(printf '%s' "$out" | head -1)"
+  got_stderr="$(printf '%s' "$out" | tail -n +2)"
+  if [[ "$got_exit" == "2" ]] && printf '%s' "$got_stderr" | grep -qF "$needle"; then
+    echo "PASS: $name"
+  else
+    echo "FAIL: $name (exit=$got_exit, expected stderr to mention '$needle')"
+    fail=1
+  fi
+}
+
 # --- fixtures -----------------------------------------------------------
 
 # Repo with the fake PEM STAGED.
@@ -103,6 +126,7 @@ echo "hello" > "$REPO_UNTRACKED_SECRET/file.txt"
 git -C "$REPO_UNTRACKED_SECRET" add file.txt
 git -C "$REPO_UNTRACKED_SECRET" commit -q -m init
 printf 'AWS_KEY=AKIA1234567890ABCDEF\n' > "$REPO_UNTRACKED_SECRET/creds.txt"
+mkdir -p "$REPO_UNTRACKED_SECRET/sub"
 
 # Repo with only a clean UNTRACKED file — no secret anywhere in it, so
 # staging + committing must still be allowed.
@@ -111,6 +135,16 @@ echo "hello" > "$REPO_UNTRACKED_CLEAN/file.txt"
 git -C "$REPO_UNTRACKED_CLEAN" add file.txt
 git -C "$REPO_UNTRACKED_CLEAN" commit -q -m init
 printf 'nothing sensitive here\n' > "$REPO_UNTRACKED_CLEAN/clean.txt"
+
+# Repo with a gitignored .env holding a fake Anthropic key — invisible to a
+# plain `git add` (git silently skips gitignored paths) but staged by a
+# FORCED add (`git add -f`). Finding 3 coverage.
+REPO_IGNORED_SECRET="$(new_repo)"
+echo "hello" > "$REPO_IGNORED_SECRET/file.txt"
+printf '.env\n' > "$REPO_IGNORED_SECRET/.gitignore"
+git -C "$REPO_IGNORED_SECRET" add file.txt .gitignore
+git -C "$REPO_IGNORED_SECRET" commit -q -m init
+printf 'ANTHROPIC_API_KEY=sk-ant-1234567890abcdefghijklmnopqrstuvwxyz\n' > "$REPO_IGNORED_SECRET/.env"
 
 OTHER_DIR="$(mktemp -d "$TMP_ROOT/other.XXXXXX")"
 
@@ -170,8 +204,8 @@ check "16 [M3] git log --grep=commit, staged PEM -> allowed (read-only)" \
 
 # --- Finding 1: same-command staging (git add ... && git commit ...) -----
 
-check "17 [F1] git add <untracked AWS key> && git commit -> blocked" \
-  2 "git add creds.txt && git commit -m x" "$REPO_UNTRACKED_SECRET"
+check_blocked_mentions "17 [F1][F2] git add <untracked AWS key> && git commit -> blocked, names creds.txt" \
+  "git add creds.txt && git commit -m x" "$REPO_UNTRACKED_SECRET" "creds.txt"
 
 check "18 [F1] git add -A && git commit -am, untracked AWS key -> blocked" \
   2 "git add -A && git commit -am x" "$REPO_UNTRACKED_SECRET"
@@ -181,6 +215,20 @@ check "19 [F1] git add <untracked clean file> && git commit -> allowed" \
 
 check "20 [F1] git add <untracked file>, no commit in command -> allowed" \
   0 "git add creds.txt" "$REPO_UNTRACKED_SECRET"
+
+# --- round-2 review findings (F1 root-relative paths, F3 forced ignored) --
+
+check "21 [F1 r2] git add ... && git commit, cwd is a SUBDIR of the repo -> blocked" \
+  2 "git add creds.txt && git commit -m x" "$REPO_UNTRACKED_SECRET/sub"
+
+check "22 [F1 r2] cd sub && git add ... && git commit, from repo-root cwd -> blocked" \
+  2 "cd sub && git add creds.txt && git commit -m x" "$REPO_UNTRACKED_SECRET"
+
+check "23 [F3] git add -f <gitignored .env w/ secret> && git commit -> blocked" \
+  2 "git add -f .env && git commit -m x" "$REPO_IGNORED_SECRET"
+
+check "24 [F3] git add <gitignored .env, no -f> && git commit -> allowed (no-op add)" \
+  0 "git add .env && git commit -m x" "$REPO_IGNORED_SECRET"
 
 # --------------------------------------------------------------------------
 
