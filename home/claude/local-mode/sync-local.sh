@@ -14,6 +14,11 @@
 #                                                 5x/$100 | Max 20x/$200 resp.;
 #                                                 old names pro|max100|max200
 #                                                 still work)
+#   ~/.claude/local-mode/sync-local.sh --plans    print the preset table
+#                                                 (this is the ONE authoritative
+#                                                 copy — install.sh/README/
+#                                                 model-preset.md point here
+#                                                 instead of duplicating it)
 set -euo pipefail
 
 DIR="$HOME/.claude/local-mode"
@@ -45,21 +50,52 @@ if [[ "${1:-}" == "--detect" ]]; then
   exit 0
 fi
 
+# plan_models: the ONE authoritative eco/balanced/best -> per-role model
+# table. Both --plan (apply) and --plans (print) read from here — nothing
+# else in the repo should hardcode these assignments.
+plan_models() { # <canonical-preset-name> -> sets ex/im/rv/re/br
+  case "$1" in
+    eco)      ex=haiku;  im=sonnet; rv=sonnet; re=sonnet; br=sonnet ;;
+    balanced) ex=haiku;  im=sonnet; rv=opus;   re=opus;   br=sonnet ;;
+    best)     ex=sonnet; im=opus;   rv=fable;  re=fable;  br=sonnet ;;
+  esac
+}
+
+# plan_canonical: resolve a preset name/alias to its canonical form, empty
+# string if unrecognized.
+plan_canonical() { # <name>
+  case "$1" in
+    eco|pro)         echo eco ;;
+    balanced|max100) echo balanced ;;
+    best|max200)     echo best ;;
+  esac
+}
+
+if [[ "${1:-}" == "--plans" ]]; then
+  echo "Plan presets (claude.* subagent models):"
+  for name in eco balanced best; do
+    plan_models "$name"
+    printf "  %-9s explorer=%-8s implementer=%-8s reviewer=%-8s reverse-engineer=%-8s browser-headless=%-8s browser-headed=%-8s\n" \
+      "$name" "$ex" "$im" "$rv" "$re" "$br" "$br"
+  done
+  echo "Apply with: sync-local.sh --plan eco|balanced|best (old names pro|max100|max200 still work)"
+  exit 0
+fi
+
 # --plan: rewrite the claude.* lines to a preset matched to the Claude
 # subscription's budget, then fall through to a normal sync.
 if [[ "${1:-}" == "--plan" ]]; then
-  case "${2:-}" in
-    eco|pro)         ex=haiku;  im=sonnet; rv=sonnet; re=sonnet; br=sonnet ;;
-    balanced|max100) ex=haiku;  im=sonnet; rv=opus;   re=opus;   br=sonnet ;;
-    best|max200)     ex=sonnet; im=opus;   rv=fable;  re=fable;  br=sonnet ;;
-    *)
-      echo "Usage: sync-local.sh --plan eco|balanced|best" >&2
-      echo "  eco       (recommended for Claude Pro)          haiku recon, sonnet everything else" >&2
-      echo "  balanced  (recommended for Max 5x/\$100)          opus for review/reverse" >&2
-      echo "  best      (recommended for Max 20x/\$200)         sonnet recon, opus implementation, fable review" >&2
-      echo "  (old names pro|max100|max200 still work as aliases)" >&2
-      exit 1 ;;
-  esac
+  canon="$(plan_canonical "${2:-}")"
+  if [[ -z "$canon" ]]; then
+    echo "Usage: sync-local.sh --plan eco|balanced|best" >&2
+    echo "  eco       (recommended for Claude Pro)          haiku recon, sonnet everything else" >&2
+    echo "  balanced  (recommended for Max 5x/\$100)          opus for review/reverse" >&2
+    echo "  best      (recommended for Max 20x/\$200)         sonnet recon, opus implementation, fable review" >&2
+    echo "  (old names pro|max100|max200 still work as aliases)" >&2
+    echo "  See sync-local.sh --plans for the full per-role table." >&2
+    exit 1
+  fi
+  plan_models "$canon"
   set_claude_role() { roles_conf_set "$CONF" "claude.$1" "$2"; } # <role-suffix> <model>
   set_claude_role explorer         "$ex"
   set_claude_role implementer      "$im"

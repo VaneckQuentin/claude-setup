@@ -102,6 +102,25 @@ for preset in ("eco", "balanced", "best"):
               statusline.plan_preset(conf), preset)
     shutil.rmtree(home, ignore_errors=True)
 
+# --- parity with sync-local.sh --plans -------------------------------------
+# `sync-local.sh --plans` is the single prose-facing source of truth for the
+# preset table (install.sh/README.md/model-preset.md all point at it instead
+# of hardcoding it) — assert its output can't silently drift from PRESETS.
+plans_output = subprocess.run(
+    ["bash", os.path.join(REPO, "home", "claude", "local-mode", "sync-local.sh"),
+     "--plans"],
+    capture_output=True, text=True)
+if plans_output.returncode != 0:
+    print(f"FAIL: sync-local.sh --plans exited {plans_output.returncode}:\n{plans_output.stderr}")
+    failures.append("sync-local.sh --plans (script failed)")
+else:
+    out = plans_output.stdout
+    for name, roles in PRESETS.items():
+        check(f"--plans mentions preset '{name}'", name in out, True)
+        for role, model in roles.items():
+            check(f"--plans mentions {name}.{role}={model}",
+                  f"{role}={model}" in out, True)
+
 # --- end-to-end: full payload through the script --------------------------
 # The rendered line must carry the model with its effort level; the preset
 # field depends on the machine's live ~/.claude/local-mode/roles.conf, so it

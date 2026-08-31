@@ -223,9 +223,12 @@ apply_plan() {
 }
 if [[ "$NO_MODELS" != 1 && -t 0 ]]; then
   echo "  Bigger Claude plans can afford stronger subagent models. Presets:"
-  echo "    [1] eco       — recommended for Claude Pro: haiku recon, sonnet for everything else"
-  echo "    [2] balanced  — recommended for Max 5x/\$100: opus for review/reverse (repo default)"
-  echo "    [3] best      — recommended for Max 20x/\$200: sonnet recon, opus implementation, fable review"
+  if plan_table="$("$HOME/.claude/local-mode/sync-local.sh" --plans 2>/dev/null)"; then
+    echo "$plan_table" | sed 's/^/    /'
+  else
+    echo "    (preset table unavailable — see sync-local.sh --plans for details)" >&2
+  fi
+  echo "    [1] eco   [2] balanced   [3] best"
   printf "  Apply a preset? [1/2/3/k(eep current), default k]: "
   read -r plan
   case "${plan:-k}" in

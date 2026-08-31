@@ -15,12 +15,11 @@ Argument given: `$ARGUMENTS`
 If `$ARGUMENTS` is empty:
 1. Read `~/.claude/local-mode/roles.conf` and print the current `claude.*`
    lines (the live subagent model assignments).
-2. List the three presets with their plan recommendations:
-   - `eco` (recommended for Claude Pro) — haiku recon, sonnet everything else
-   - `balanced` (recommended for Max 5x/$100) — opus for review/reverse
-   - `best` (recommended for Max 20x/$200) — sonnet recon, opus
-     implementation, fable review/reverse
-3. Stop there — do not run sync-local.sh.
+2. Run `bash "$HOME/.claude/local-mode/sync-local.sh" --plans` and print its
+   output — the authoritative per-preset, per-role model table (presets:
+   `eco`, recommended for Claude Pro; `balanced`, recommended for Max
+   5x/$100; `best`, recommended for Max 20x/$200).
+3. Stop there — do not run sync-local.sh --plan.
 
 If `$ARGUMENTS` is not empty:
 1. Validate it is one of `eco`, `balanced`, `best` (or the legacy aliases

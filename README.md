@@ -48,12 +48,12 @@ per-project Serena registrations (see below), the Ollama model weights.
    pulls the roles.conf set (tens of GB), `--no-models` skips.
 
    It also asks which **Claude plan preset** to apply — bigger plans can
-   afford stronger subagent models (`eco`, recommended for Claude Pro:
-   haiku/sonnet; `balanced`, recommended for Max 5x/$100: opus for review;
-   `best`, recommended for Max 20x/$200: opus implementation + fable review).
-   Change it any time with
-   `~/.claude/local-mode/sync-local.sh --plan eco|balanced|best` (old names
-   `pro`/`max100`/`max200` still work).
+   afford stronger subagent models. Presets are `eco`, `balanced`, and
+   `best`, recommended for Claude Pro, Max 5x/$100, and Max 20x/$200
+   respectively; `~/.claude/local-mode/sync-local.sh --plans` is the
+   authoritative listing of what each preset assigns per role. Change it
+   any time with `~/.claude/local-mode/sync-local.sh --plan eco|balanced|best`
+   (old names `pro`/`max100`/`max200` still work).
 
 3. `claude` once to log in.
 4. In each big codebase (symbol navigation worth ~30 tool schemas/session):
@@ -134,8 +134,9 @@ Everything is driven by `home/claude/local-mode/roles.conf` (full-local roles,
 `ollama_run` tiers, hybrid subagent Claude models). Edit it, run
 `~/.claude/local-mode/sync-local.sh`, then `./capture.sh` + commit.
 Claude-plan presets: `sync-local.sh --plan eco|balanced|best` (old names
-`pro`/`max100`/`max200` still work), or interactively from inside a session
-with `/model-preset [eco|balanced|best]`.
+`pro`/`max100`/`max200` still work; `sync-local.sh --plans` prints the
+per-role table), or interactively from inside a session with
+`/model-preset [eco|balanced|best]`.
 
 Full-local note: the Ollama *server* context length must be ≥64K for
 `claude --local` (Ollama app → Settings → Context length, or

@@ -85,6 +85,17 @@ check_agent_model home/claude/agents/reverse-engineer.md claude.reverse-engineer
 check_agent_model home/claude/agents/browser-headless.md claude.browser-headless
 check_agent_model home/claude/agents/browser-headed.md   claude.browser-headed
 
+echo "== plan preset table has one prose-facing source (sync-local.sh --plans)"
+# install.sh/README.md/commands/model-preset.md must point at
+# `sync-local.sh --plans` instead of re-hardcoding the per-role model table —
+# guard against the stale hardcoded phrasing creeping back in.
+for f in install.sh README.md home/claude/commands/model-preset.md; do
+  if grep -qE 'opus implementation, fable|opus for review/reverse|haiku recon, sonnet' "$f"; then
+    echo "FAIL: $f still hardcodes the plan preset table — use sync-local.sh --plans instead"
+    fail=1
+  fi
+done
+
 echo "== commit-guard behavior (tests/test-commit-guard.sh)"
 bash tests/test-commit-guard.sh || { echo "FAIL: tests/test-commit-guard.sh"; fail=1; }
 
