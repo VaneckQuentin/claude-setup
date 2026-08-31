@@ -3,7 +3,8 @@
   "statusLine": {
     "type": "command",
     "command": "sh \"$HOME/.claude/hooks/run-hook.sh\" \"$HOME/.claude/hooks/statusline.py\"",
-    "padding": 0
+    "padding": 0,
+    "refreshInterval": 2
   },
   "hooks": {
     "UserPromptSubmit": [
@@ -41,6 +42,33 @@
             "type": "command",
             "command": "sh \"$HOME/.claude/hooks/run-hook.sh\" \"$HOME/.claude/hooks/keep-awake.py\" stop",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "sh \"$HOME/.claude/hooks/run-hook.sh\" \"$HOME/.claude/hooks/agent-progress.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$HOME/.claude/hooks/run-hook.sh\" \"$HOME/.claude/hooks/agent-progress.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$HOME/.claude/hooks/run-hook.sh\" \"$HOME/.claude/hooks/agent-progress.py\"",
+            "timeout": 10
           }
         ]
       }
@@ -76,6 +104,16 @@
             "command": "sh \"$HOME/.claude/hooks/run-hook.sh\" \"$HOME/.claude/hooks/post-edit-lint.py\"",
             "timeout": 15,
             "statusMessage": "Syntax check…"
+          }
+        ]
+      },
+      {
+        "matcher": "TodoWrite|TaskCreate|TaskUpdate",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$HOME/.claude/hooks/run-hook.sh\" \"$HOME/.claude/hooks/agent-progress.py\"",
+            "timeout": 10
           }
         ]
       }

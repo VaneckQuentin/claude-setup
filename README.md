@@ -10,7 +10,8 @@ personal data live here — install it, log in, and it works.
 |---|---|
 | Global rules (dispatch, language, pipelines) | `home/claude/CLAUDE.md` |
 | Settings: effort, hooks, statusline, LSP plugins (machine-local model pin preserved, not shipped) | `home/claude/settings.json` |
-| Statusline (model + effort, branch, agent preset, plan usage %, context %) | `home/claude/hooks/statusline.py` |
+| Statusline (model + effort, branch, agent preset, plan usage %, context %, subagent progress) | `home/claude/hooks/statusline.py` |
+| Subagent progress hook (token-free per-agent task bars) | `home/claude/hooks/agent-progress.py` |
 | Dispatch hook (bulk-intent gate, FR+EN) | `home/claude/hooks/dispatch-directive.py` |
 | Commit guard (blocks commits leaking secrets/personal data) | `home/claude/hooks/commit-guard.py` |
 | Post-edit lint hook (token-free syntax checks) | `home/claude/hooks/post-edit-lint.py` |

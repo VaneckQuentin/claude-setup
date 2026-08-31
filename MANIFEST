@@ -10,6 +10,7 @@ claude/hooks/post-edit-lint.py
 claude/hooks/keep-awake.py
 claude/hooks/commit-guard.py
 claude/hooks/statusline.py
+claude/hooks/agent-progress.py
 claude/agents/explorer.md
 claude/agents/implementer.md
 claude/agents/reviewer.md

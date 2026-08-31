@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -120,6 +121,33 @@ line = r.stdout.strip()
 check("e2e: model shown with effort", "Fable 5 (high)" in line, True)
 check("e2e: plan usage shown", "5h 12%" in line and "7d 34%" in line, True)
 check("e2e: context %% shown", "ctx 45%" in line, True)
+
+# The 5h label becomes a countdown to the window reset when resets_at (epoch
+# seconds) is known and still ahead — knowing WHEN the quota returns is what
+# the field is for; without it the static "5h" label stays.
+def render_limits(five_hour):
+    r = subprocess.run(
+        [sys.executable, os.path.join(REPO, "home", "claude", "hooks", "statusline.py")],
+        input=json.dumps(dict(payload, rate_limits={
+            "five_hour": five_hour, "seven_day": {"used_percentage": 34}})),
+        capture_output=True, text=True)
+    return r.stdout.strip()
+
+
+countdown_line = render_limits({"used_percentage": 12,
+                                "resets_at": int(time.time()) + 8100})
+check("e2e: 5h reset countdown replaces the '5h' label",
+      "2:1" in countdown_line and "12%" in countdown_line and "5h " not in countdown_line,
+      True)
+check("e2e: countdown leaves the 7d field alone", "7d 34%" in countdown_line, True)
+check("e2e: elapsed resets_at falls back to the '5h' label",
+      "5h 12%" in render_limits({"used_percentage": 12,
+                                 "resets_at": int(time.time()) - 60}), True)
+check("e2e: no resets_at keeps the '5h' label",
+      "5h 12%" in render_limits({"used_percentage": 12}), True)
+check("e2e: millisecond-looking resets_at falls back to the '5h' label",
+      "5h 12%" in render_limits({"used_percentage": 12,
+                                 "resets_at": int(time.time() * 1000) + 8100}), True)
 
 no_effort = dict(payload)
 del no_effort["effort"]
