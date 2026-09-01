@@ -105,9 +105,6 @@ python3 tests/test-server-paths.py || { echo "FAIL: tests/test-server-paths.py";
 echo "== statusline preset/effort display (tests/test-statusline.py)"
 python3 tests/test-statusline.py || { echo "FAIL: tests/test-statusline.py"; fail=1; }
 
-echo "== subagent progress files + statusline segment (tests/test-agent-progress.py)"
-python3 tests/test-agent-progress.py || { echo "FAIL: tests/test-agent-progress.py"; fail=1; }
-
 echo "== dispatch directive hybrid/local (tests/test-dispatch-directive.py)"
 python3 tests/test-dispatch-directive.py || { echo "FAIL: tests/test-dispatch-directive.py"; fail=1; }
 

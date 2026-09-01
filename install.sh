@@ -124,7 +124,6 @@ chmod +x "$HOME/.claude/local-mode/claude-local" \
          "$HOME/.claude/hooks/keep-awake.py" \
          "$HOME/.claude/hooks/commit-guard.py" \
          "$HOME/.claude/hooks/statusline.py" \
-         "$HOME/.claude/hooks/agent-progress.py" \
          "$HOME/.claude/hooks/run-hook.sh" 2>/dev/null || true
 
 echo "== Registering ollama-delegate MCP (user scope)"

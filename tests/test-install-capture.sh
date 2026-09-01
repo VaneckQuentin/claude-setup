@@ -82,8 +82,7 @@ done < <(manifest_entries)
 hooks_ok=1
 for h in local-mode/claude-local local-mode/sync-local.sh local-mode/bootstrap-reverse.sh \
          local-mode/roles-lib.sh hooks/dispatch-directive.py hooks/post-edit-lint.py \
-         hooks/keep-awake.py hooks/commit-guard.py hooks/statusline.py \
-         hooks/agent-progress.py hooks/run-hook.sh; do
+         hooks/keep-awake.py hooks/commit-guard.py hooks/statusline.py hooks/run-hook.sh; do
   [[ -x "$SANDBOX/.claude/$h" ]] || { echo "  not executable: $SANDBOX/.claude/$h" >&2; hooks_ok=0; }
 done
 [[ "$hooks_ok" == 1 ]] && ok "1c hook files executable" || bad "1c hook files executable"
