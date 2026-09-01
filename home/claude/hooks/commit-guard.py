@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 PreToolUse(Bash) hook — block `git commit` when the staged changes contain
-secrets or personal data. Exit 2 feeds the reason back to Claude (blocking);
+secrets or personal data, or when the commit message does not follow
+Conventional Commits. Exit 2 feeds the reason back to Claude (blocking);
 anything else is fail-open so a broken guard never wedges normal work.
 
 Personal identifiers (home path, git email) are derived AT RUNTIME so this
@@ -9,6 +10,7 @@ file itself stays shareable — never hardcode them here.
 
 Also runnable by hand:  commit-guard.py --staged [repo-dir]
 Kill switch (with explicit user approval only): CLAUDE_COMMIT_GUARD=0
+Message check only (repo with its own convention): CLAUDE_COMMIT_CONVENTION=0
 """
 import json
 import os
@@ -231,6 +233,22 @@ def staging_statement_flags(statements):
     return has_staging, has_forced
 
 
+def split_statements(tokens):
+    """Group tokens into shell statements (split on ;/&&/||/&/newline)."""
+    statements = [[]]
+    for tok in tokens:
+        if tok in STATEMENT_SEPARATORS:
+            statements.append([])
+        else:
+            statements[-1].append(tok)
+    return [s for s in statements if s]
+
+
+def resolve_dir(cwd, path):
+    path = os.path.expanduser(path)
+    return path if os.path.isabs(path) else os.path.normpath(os.path.join(cwd, path))
+
+
 def find_commit_invocations(command, start_cwd):
     """Walk `command` statement by statement (split on ;/&&/||/&/newline),
     tracking `cd` so it carries into later statements the way a real shell
@@ -244,15 +262,7 @@ def find_commit_invocations(command, start_cwd):
     `git add`/`git stage` statement (see staging_statement_flags), since
     that staging would run before the commit even though the guard only
     sees the commit's own already-staged diff."""
-    tokens = tokenize(command)
-
-    statements = [[]]
-    for tok in tokens:
-        if tok in STATEMENT_SEPARATORS:
-            statements.append([])
-        else:
-            statements[-1].append(tok)
-    statements = [s for s in statements if s]
+    statements = split_statements(tokenize(command))
 
     same_command_staging, same_command_forced_staging = staging_statement_flags(statements)
 
@@ -260,8 +270,7 @@ def find_commit_invocations(command, start_cwd):
     invocations = []
     for statement in statements:
         if statement[0] == "cd" and len(statement) >= 2:
-            cd_dir = os.path.expanduser(statement[1])
-            cwd = cd_dir if os.path.isabs(cd_dir) else os.path.normpath(os.path.join(cwd, cd_dir))
+            cwd = resolve_dir(cwd, statement[1])
             continue
 
         stages = command_stages(statement)
@@ -273,8 +282,7 @@ def find_commit_invocations(command, start_cwd):
                 _, cd_dirs = invocation
                 stage_cwd = cwd
                 for d in cd_dirs:
-                    d = os.path.expanduser(d)
-                    stage_cwd = d if os.path.isabs(d) else os.path.normpath(os.path.join(stage_cwd, d))
+                    stage_cwd = resolve_dir(stage_cwd, d)
                 invocations.append((stage_cwd,
                                      commit_all_flag(stage) or same_command_staging,
                                      same_command_staging,
@@ -287,6 +295,152 @@ def find_commit_invocations(command, start_cwd):
                                  same_command_forced_staging))
 
     return invocations
+
+
+# --- Conventional Commits message check -------------------------------------
+
+COMMIT_TYPES = ("feat", "fix", "refactor", "perf", "docs", "test",
+                "build", "ci", "chore", "style", "revert")
+SUBJECT_MAX_CHARS = 72
+SUBJECT_RE = re.compile(r"^(?P<type>[A-Za-z]+)(\([^()\s]+\))?!?: (?P<summary>\S.*)$")
+# `-m "$(cat <<'EOF' ... EOF)"` — the whole substitution survives tokenize()
+# as one token, so unwrap it to the heredoc body.
+CAT_HEREDOC_RE = re.compile(r"^\$\(\s*cat\s+<<-?\s*['\"]?(\w+)['\"]?[ \t]*\n(.*)\n\1\s*\)$", re.S)
+# Options that make git reuse or generate the message: nothing of ours to check.
+COMMIT_OPTS_WITHOUT_OWN_MESSAGE = {"--reuse-message", "--reedit-message", "--fixup", "--squash",
+                                   "--template"}
+
+
+def heredoc_body(command, delimiter):
+    """Body of the first `<<DELIM` heredoc in the raw command, or None."""
+    pattern = (r"<<-?\s*['\"]?" + re.escape(delimiter) + r"['\"]?[^\n]*\n(.*?)\n[ \t]*"
+               + re.escape(delimiter) + r"[ \t]*(?:\n|$)")
+    match = re.search(pattern, command, re.S)
+    return match.group(1) if match else None
+
+
+def commit_message(stage, cwd, command):
+    """The message text this `git ... commit` stage hands to git, or None
+    when git would open an editor, reuse an existing message, or generate
+    one (fixup/squash) — nothing to validate then. `-F <file>` is read
+    relative to `cwd`; a missing file yields None (git will fail anyway)."""
+    parts = []
+    file_arg = None
+    i = stage.index("commit") + 1
+    while i < len(stage):
+        tok = stage[i]
+        if tok == "--":
+            break
+        if tok in ("-m", "--message"):
+            if i + 1 < len(stage):
+                parts.append(stage[i + 1])
+            i += 2
+            continue
+        if tok.startswith("--message="):
+            parts.append(tok[len("--message="):])
+        elif tok in ("-F", "--file"):
+            if i + 1 < len(stage):
+                file_arg = stage[i + 1]
+            i += 2
+            continue
+        elif tok.startswith("--file="):
+            file_arg = tok[len("--file="):]
+        elif tok in COMMIT_OPTS_WITHOUT_OWN_MESSAGE:
+            return None
+        elif tok.split("=", 1)[0] in COMMIT_OPTS_WITHOUT_OWN_MESSAGE:
+            return None
+        elif tok in COMMIT_LONG_OPTS_WITH_ARG:
+            i += 2
+            continue
+        elif tok.startswith("-") and not tok.startswith("--") and len(tok) > 1:
+            # Short-option cluster, e.g. -am "msg", -m"msg", -sF file, -CHEAD.
+            letters = tok[1:]
+            for pos, letter in enumerate(letters):
+                if letter not in COMMIT_SHORT_LETTERS_WITH_ARG:
+                    continue
+                attached = letters[pos + 1:]
+                if attached:
+                    value = attached
+                else:
+                    value = stage[i + 1] if i + 1 < len(stage) else None
+                    i += 1
+                if letter == "m" and value is not None:
+                    parts.append(value)
+                elif letter == "F":
+                    file_arg = value
+                else:  # -C / -c reuse a commit's message, -t opens the editor
+                    return None
+                break
+        i += 1
+
+    if parts:
+        if len(parts) == 1:
+            unwrapped = CAT_HEREDOC_RE.match(parts[0])
+            if unwrapped:
+                return unwrapped.group(2)
+        return "\n\n".join(parts)
+    if file_arg == "-":
+        delimiter = re.search(r"<<-?\s*['\"]?(\w+)", command)
+        return heredoc_body(command, delimiter.group(1)) if delimiter else None
+    if file_arg:
+        try:
+            with open(os.path.join(cwd, os.path.expanduser(file_arg)), encoding="utf-8") as fh:
+                return fh.read(DISK_FILE_READ_CAP)
+        except OSError:
+            return None
+    return None
+
+
+def message_problems(message):
+    """Why `message` is not a Conventional Commit; empty list if it is."""
+    lines = message.replace("\r\n", "\n").strip("\n").split("\n")
+    subject = lines[0].strip()
+    problems = []
+    match = SUBJECT_RE.match(subject)
+    if not match:
+        problems.append(f'subject "{subject[:60]}" is not of the form `type(scope): summary`')
+    else:
+        commit_type = match.group("type")
+        if commit_type not in COMMIT_TYPES:
+            problems.append(f"unknown type '{commit_type}' (allowed: {' '.join(COMMIT_TYPES)})")
+    if len(subject) > SUBJECT_MAX_CHARS:
+        problems.append(f"subject is {len(subject)} chars (max {SUBJECT_MAX_CHARS})")
+    if subject.endswith("."):
+        problems.append("subject must not end with a period")
+    if len(lines) > 1 and lines[1].strip():
+        problems.append("leave a blank line between the subject and the body")
+    return problems
+
+
+def find_message_problems(command, start_cwd):
+    """Conventional Commits problems for every `git commit` in `command`
+    that carries its own message (-m / -F / heredoc)."""
+    problems = []
+    cwd = start_cwd
+    for statement in split_statements(tokenize(command)):
+        if statement[0] == "cd" and len(statement) >= 2:
+            cwd = resolve_dir(cwd, statement[1])
+            continue
+        for stage in command_stages(statement):
+            invocation = parse_git_invocation(stage)
+            if not invocation or invocation[0] != "commit":
+                continue
+            stage_cwd = cwd
+            for d in invocation[1]:
+                stage_cwd = resolve_dir(stage_cwd, d)
+            message = commit_message(stage, stage_cwd, command)
+            if message is not None:
+                problems.extend(message_problems(message))
+    return problems
+
+
+CONVENTION_HELP = (
+    "Expected `type(scope): summary` — types: " + " ".join(COMMIT_TYPES)
+    + "; optional scope; `!` before the colon for a breaking change; subject "
+    f"<= {SUBJECT_MAX_CHARS} chars, imperative, no trailing period; blank line "
+    "before the body. Fix the message and commit again. A repo with its own "
+    "convention can opt out with CLAUDE_COMMIT_CONVENTION=0 — ask the user first."
+)
 
 
 def added_lines(diff):
@@ -382,7 +536,8 @@ def main():
     if os.environ.get("CLAUDE_COMMIT_GUARD", "1") == "0":
         return 0
 
-    if len(sys.argv) > 1 and sys.argv[1] == "--staged":  # manual mode
+    manual_mode = len(sys.argv) > 1 and sys.argv[1] == "--staged"
+    if manual_mode:
         cwd = sys.argv[2] if len(sys.argv) > 2 else os.getcwd()
         invocations = [(cwd, False, False, False)]
     else:  # hook mode
@@ -399,6 +554,13 @@ def main():
         if not invocations:
             return 0
 
+    convention_problems = []
+    if os.environ.get("CLAUDE_COMMIT_CONVENTION", "1") != "0" and not manual_mode:
+        try:
+            convention_problems = find_message_problems(command, cwd)
+        except Exception:
+            pass  # fail-open
+
     try:
         findings = []
         for scan_cwd, include_unstaged, include_untracked, include_ignored in invocations:
@@ -413,8 +575,11 @@ def main():
               + "\nRemove or redact the data (unstage the file, scrub the value), "
                 "then commit again. Do NOT bypass without explicit user approval.",
               file=sys.stderr)
-        return 2
-    return 0
+    if convention_problems:
+        print("COMMIT BLOCKED — message does not follow Conventional Commits:\n- "
+              + "\n- ".join(convention_problems) + "\n" + CONVENTION_HELP,
+              file=sys.stderr)
+    return 2 if findings or convention_problems else 0
 
 
 if __name__ == "__main__":
