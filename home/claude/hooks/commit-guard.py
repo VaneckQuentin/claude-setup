@@ -311,19 +311,40 @@ COMMIT_OPTS_WITHOUT_OWN_MESSAGE = {"--reuse-message", "--reedit-message", "--fix
                                    "--template"}
 
 
-def heredoc_body(command, delimiter):
-    """Body of the first `<<DELIM` heredoc in the raw command, or None."""
-    pattern = (r"<<-?\s*['\"]?" + re.escape(delimiter) + r"['\"]?[^\n]*\n(.*?)\n[ \t]*"
-               + re.escape(delimiter) + r"[ \t]*(?:\n|$)")
-    match = re.search(pattern, command, re.S)
-    return match.group(1) if match else None
+HEREDOC_RE = re.compile(r"<<-?[ \t]*(['\"]?)(\w+)\1[^\n]*\n(.*?)\n[ \t]*\2[ \t]*(?=\n|$)", re.S)
+MESSAGE_FROM_STDIN = object()  # sentinel: `-F -`, message arrives on stdin
+
+
+def stdin_heredoc_messages(command):
+    """Bodies of the heredocs that feed a `git commit -F -`, in command
+    order. A heredoc belongs to the statement on the line that opens it, so
+    the line before each `<<` is parsed: an earlier `cat > file <<EOF` in the
+    same command must not be mistaken for the commit message."""
+    bodies = []
+    previous_end = 0
+    for match in HEREDOC_RE.finditer(command):
+        opening_line = command[previous_end:match.start()].rsplit("\n", 1)[-1]
+        previous_end = match.end()
+        try:
+            statements = split_statements(tokenize(opening_line))
+        except ValueError:
+            continue  # e.g. `-m "$(cat <<EOF`: unbalanced quote, not a -F - heredoc
+        for statement in statements:
+            for stage in command_stages(statement):
+                invocation = parse_git_invocation(stage)
+                if (invocation and invocation[0] == "commit"
+                        and commit_message(stage, "", command) is MESSAGE_FROM_STDIN):
+                    bodies.append(match.group(3))
+    return bodies
 
 
 def commit_message(stage, cwd, command):
     """The message text this `git ... commit` stage hands to git, or None
     when git would open an editor, reuse an existing message, or generate
     one (fixup/squash) — nothing to validate then. `-F <file>` is read
-    relative to `cwd`; a missing file yields None (git will fail anyway)."""
+    relative to `cwd`; a missing file yields None (git will fail anyway).
+    `-F -` yields MESSAGE_FROM_STDIN: the caller pairs it with the heredoc
+    that feeds it (see stdin_heredoc_messages); a pipe is invisible to us."""
     parts = []
     file_arg = None
     i = stage.index("commit") + 1
@@ -380,8 +401,7 @@ def commit_message(stage, cwd, command):
                 return unwrapped.group(2)
         return "\n\n".join(parts)
     if file_arg == "-":
-        delimiter = re.search(r"<<-?\s*['\"]?(\w+)", command)
-        return heredoc_body(command, delimiter.group(1)) if delimiter else None
+        return MESSAGE_FROM_STDIN
     if file_arg:
         try:
             with open(os.path.join(cwd, os.path.expanduser(file_arg)), encoding="utf-8") as fh:
@@ -417,6 +437,7 @@ def find_message_problems(command, start_cwd):
     that carries its own message (-m / -F / heredoc)."""
     problems = []
     cwd = start_cwd
+    stdin_messages = iter(stdin_heredoc_messages(command))
     for statement in split_statements(tokenize(command)):
         if statement[0] == "cd" and len(statement) >= 2:
             cwd = resolve_dir(cwd, statement[1])
@@ -429,6 +450,8 @@ def find_message_problems(command, start_cwd):
             for d in invocation[1]:
                 stage_cwd = resolve_dir(stage_cwd, d)
             message = commit_message(stage, stage_cwd, command)
+            if message is MESSAGE_FROM_STDIN:
+                message = next(stdin_messages, None)
             if message is not None:
                 problems.extend(message_problems(message))
     return problems

@@ -304,6 +304,28 @@ CMD
 )
 check "51 [CC] -F - <<'EOF' heredoc, good -> allowed" 0 "$STDIN_GOOD" "$REPO_CONV"
 check "52 [CC] -F - <<'EOF' heredoc, bad -> blocked" 2 "$STDIN_BAD" "$REPO_CONV"
+MIXED_GOOD=$(cat <<'CMD'
+cat > notes.txt <<'EOF'
+# a heading that is not a commit subject
+EOF
+git commit -F - <<'EOF'
+chore: message from the second heredoc
+EOF
+CMD
+)
+MIXED_BAD=$(cat <<'CMD'
+cat > notes.txt <<'EOF'
+chore: looks like a subject but feeds cat, not git
+EOF
+git commit -F - <<'EOF'
+not a conventional subject
+EOF
+CMD
+)
+check "52b [CC] earlier unrelated heredoc, commit heredoc good -> allowed" 0 "$MIXED_GOOD" "$REPO_CONV"
+check "52c [CC] earlier unrelated heredoc, commit heredoc bad -> blocked" 2 "$MIXED_BAD" "$REPO_CONV"
+check "52d [CC] -F - fed by a pipe (no heredoc) -> allowed (fail-open)" \
+  0 'printf "bad\n" | git commit -F -' "$REPO_CONV"
 check "53 [CC] -F file, good -> allowed" 0 'git commit -F good-msg.txt' "$REPO_CONV"
 check "54 [CC] -F file, bad -> blocked" 2 'git commit -F bad-msg.txt' "$REPO_CONV"
 check "55 [CC] --file=file, bad -> blocked" 2 'git commit --file=bad-msg.txt' "$REPO_CONV"
