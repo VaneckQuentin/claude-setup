@@ -124,5 +124,6 @@
     "rust-analyzer-lsp@claude-plugins-official": true
   },
   "effortLevel": "high",
-  "skipWorkflowUsageWarning": true
+  "skipWorkflowUsageWarning": true,
+  "remoteControlAtStartup": false
 }
