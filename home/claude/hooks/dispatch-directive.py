@@ -27,7 +27,9 @@ Split this request into (a) EXPLORATION (finding/reading/searching code) and (b)
 3. hard reasoning (architecture, tricky bug, diff review)   -> `reviewer` subagent or handle inline
 4. bulk grunt text (summarize a long file/log, classify, draft) -> `ollama_run` tool (local, free) — pass inputs by path via `files`, never paste content
 
-Spawn independent subtasks in parallel; only conclusions return here. If the whole request is one trivial step, ignore this and just answer directly — do NOT over-decompose."""
+Spawn independent subtasks in parallel; only conclusions return here. If the whole request is one trivial step, ignore this and just answer directly — do NOT over-decompose.
+
+Whatever language this note is in, reply to the user in the language of THEIR message."""
 
 # Full-local sessions have opposite economics: tokens are free, the costs are
 # wall-clock (every subagent spawn re-prefills ~25K tokens of system prompt)
@@ -41,7 +43,9 @@ Tokens are free here; the real costs are wall-clock time and your own context qu
 3. bulk grunt text (summarize a long file/log, classify, draft) -> `ollama_run` tool — pass inputs by path via `files`, never paste content.
 4. Run subtasks SEQUENTIALLY — Ollama serves one request per model at a time; parallel subagents serialize and just stack prefill overhead.
 
-If the whole request is one trivial step, ignore this and just answer directly — do NOT over-decompose."""
+If the whole request is one trivial step, ignore this and just answer directly — do NOT over-decompose.
+
+Whatever language this note is in, reply to the user in the language of THEIR message."""
 
 
 def is_local_session():

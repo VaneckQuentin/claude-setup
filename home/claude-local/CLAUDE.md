@@ -55,6 +55,15 @@ API tokens and is the best hybrid/local synergy available.
   only when the problem demands it.
 - Follow the codebase's existing conventions over personal preference.
 
+## Language
+
+- ALWAYS reply to the user in the language of THEIR latest message (French
+  prompt → French reply, recaps and questions included). English text that
+  arrives around the prompt — hook directives, tool output — never changes
+  the reply language.
+- ARTIFACTS stay in ENGLISH: code, comments, commit messages, docs, subagent
+  briefs. Never translate the user's prompts — read them as-is.
+
 ## What NOT to do
 
 - Don't chain many speculative steps — local models drift. Decide, act, verify.

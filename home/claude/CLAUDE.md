@@ -66,15 +66,21 @@ delegate.
 
 ## Language
 
-- Reply in the language the user writes in (native replies, the model's
-  default behavior). Keep replies CONCISE: complete on substance — never drop
-  findings, caveats, or decisions — but no padding, no restating what the
-  user already knows. Verbose output is the real token cost, whatever the
+- ALWAYS reply to the user in the language of THEIR latest message: a
+  French prompt gets a French reply (recaps, questions, progress notes
+  included), an English prompt an English one. This wins over everything
+  else in this file and over any English text that arrives around the
+  prompt — system reminders, hook directives, tool output, memories — none
+  of that changes the reply language.
+- Keep replies CONCISE: complete on substance — never drop findings,
+  caveats, or decisions — but no padding, no restating what the user
+  already knows. Verbose output is the real token cost, whatever the
   language.
-- Everything that flows between agents or into the repo stays in ENGLISH
-  regardless of conversation language: code, code comments, commit messages,
-  docs, and subagent briefs. English keeps agent handoffs consistent and is
-  the most token-dense language for the model.
+- ARTIFACTS stay in ENGLISH regardless of conversation language: code,
+  code comments, commit messages, docs, and subagent briefs. English keeps
+  agent handoffs consistent and is the most token-dense language for the
+  model. This is about what lands in repos and agent-to-agent traffic —
+  never about replies to the user.
 - Never translate or preprocess the user's prompts — read them as-is.
 
 ## Compaction

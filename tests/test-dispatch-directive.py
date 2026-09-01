@@ -50,11 +50,15 @@ hybrid = run_hook(BULK_PROMPT)
 check("hybrid: bulk prompt injects the hybrid directive",
       "Dispatch protocol" in hybrid and "parallel" in hybrid)
 check("hybrid: no LOCAL-mode content leaks in", "LOCAL mode" not in hybrid)
+check("hybrid: directive tells Claude to reply in the user's language",
+      "language of THEIR message" in hybrid)
 
 local = run_hook(BULK_PROMPT, LOCAL_ENV)
 check("local: bulk prompt injects the LOCAL directive",
       "LOCAL mode" in local and "SEQUENTIALLY" in local)
 check("local: inline-first editing is stated", "INLINE" in local)
+check("local: directive tells Claude to reply in the user's language",
+      "language of THEIR message" in local)
 check("local: hybrid parallel advice is absent",
       "Spawn independent subtasks in parallel" not in local)
 
