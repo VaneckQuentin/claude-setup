@@ -29,8 +29,11 @@ AGENTS_LOCAL="$HOME/.claude-local/agents"
 AGENTS_HYBRID="$HOME/.claude/agents"
 OLLAMA="http://localhost:11434"
 
+# roles-lib.sh ships next to this script (same dir installed and in the
+# repo checkout), so source the sibling rather than the $HOME copy: --plans
+# must work from a bare clone (CI, tests) where nothing is installed yet.
 # shellcheck source=roles-lib.sh
-source "$DIR/roles-lib.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/roles-lib.sh"
 
 installed_models() { curl -sf "$OLLAMA/api/tags" 2>/dev/null | python3 -c "import sys,json;[print(m['name']) for m in json.load(sys.stdin).get('models',[])]" 2>/dev/null; }
 

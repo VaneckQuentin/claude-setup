@@ -106,10 +106,14 @@ for preset in ("eco", "balanced", "best"):
 # `sync-local.sh --plans` is the single prose-facing source of truth for the
 # preset table (install.sh/README.md/model-preset.md all point at it instead
 # of hardcoding it) — assert its output can't silently drift from PRESETS.
+# Empty throwaway HOME: --plans must work from a bare checkout with nothing
+# installed (CI), so the check can't pass just because this machine has one.
+plans_home = tempfile.mkdtemp(prefix="statusline-plans.")
 plans_output = subprocess.run(
     ["bash", os.path.join(REPO, "home", "claude", "local-mode", "sync-local.sh"),
      "--plans"],
-    capture_output=True, text=True)
+    env={**os.environ, "HOME": plans_home}, capture_output=True, text=True)
+shutil.rmtree(plans_home, ignore_errors=True)
 if plans_output.returncode != 0:
     print(f"FAIL: sync-local.sh --plans exited {plans_output.returncode}:\n{plans_output.stderr}")
     failures.append("sync-local.sh --plans (script failed)")
