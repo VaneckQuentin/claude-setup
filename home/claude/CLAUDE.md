@@ -91,6 +91,12 @@ Drop exploration transcripts and raw tool output first — never the above.
   .claude.json, history). A PreToolUse guard blocks `git commit` when staged
   changes trip these checks — fix the data, never bypass
   (CLAUDE_COMMIT_GUARD=0 requires explicit user approval).
+- Commit messages follow Conventional Commits: `type(scope): imperative
+  summary` (types: feat fix refactor perf docs test build ci chore style
+  revert; `!` before the colon for a breaking change), subject <= 72 chars,
+  no trailing period, blank line before the body, one concern per commit.
+  The commit guard rejects non-conforming messages; a repo with its own
+  convention can opt out with CLAUDE_COMMIT_CONVENTION=0 (user approval).
 - Don't fan out subagents for tightly-coupled work — coordination overhead can
   cost more than it saves. Parallelize only genuinely independent tasks.
 - Don't delegate orchestration, design decisions, or critical/subtle code to

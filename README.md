@@ -12,7 +12,7 @@ personal data live here — install it, log in, and it works.
 | Settings: effort, hooks, statusline, LSP plugins (machine-local model pin preserved, not shipped) | `home/claude/settings.json` |
 | Statusline (model + effort, branch, agent preset, plan usage %, context %) | `home/claude/hooks/statusline.py` |
 | Dispatch hook (bulk-intent gate, FR+EN) | `home/claude/hooks/dispatch-directive.py` |
-| Commit guard (blocks commits leaking secrets/personal data) | `home/claude/hooks/commit-guard.py` |
+| Commit guard (blocks commits leaking secrets/personal data or with a non-Conventional-Commits message) | `home/claude/hooks/commit-guard.py` |
 | Post-edit lint hook (token-free syntax checks) | `home/claude/hooks/post-edit-lint.py` |
 | Keep-awake hook (blocks idle SYSTEM sleep for the length of a turn; macOS `caffeinate`, native Windows `SetThreadExecutionState`; silent no-op under WSL2/Linux; `CLAUDE_KEEP_AWAKE_MAX_HOURS` caps the hold, default 8h) | `home/claude/hooks/keep-awake.py` |
 | Hybrid subagents (haiku/sonnet/opus tiers) | `home/claude/agents/*.md` |

@@ -65,6 +65,12 @@ API tokens and is the best hybrid/local synergy available.
   one-off scripts, extracted data, notes) go to the session scratchpad or ONE
   untracked dir (e.g. `.work/`); deliverables follow the project's existing
   layout.
+- Commit messages follow Conventional Commits: `type(scope): imperative
+  summary` (types: feat fix refactor perf docs test build ci chore style
+  revert; `!` before the colon for a breaking change), subject <= 72 chars,
+  no trailing period, blank line before the body, one concern per commit.
+  The commit guard rejects non-conforming messages; a repo with its own
+  convention can opt out with CLAUDE_COMMIT_CONVENTION=0 (user approval).
 
 To change which model a role uses: edit `~/.claude/local-mode/roles.conf`, run
 `sync-local.sh`, then relaunch `claude --local`. Keep the Ollama server tuned:
